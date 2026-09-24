@@ -1,4 +1,8 @@
-use roblox_asset_link::{config::Config, read_asset, snapshot};
+use roblox_asset_link::{
+    catalog::{Catalog, Entry},
+    config::Config,
+    read_asset,
+};
 use std::path::Path;
 
 fn config() -> Config {
@@ -7,7 +11,25 @@ fn config() -> Config {
 
 #[test]
 fn real_blender_assets_have_expected_geometry_and_materials() {
-    let snapshot = snapshot(Path::new("tests/fixtures"), &config()).unwrap();
+    let catalog = Catalog {
+        format_version: 1,
+        config: config(),
+        assets: ["doorway", "glass", "stair"]
+            .into_iter()
+            .map(|name| {
+                (
+                    name.to_owned(),
+                    Entry {
+                        name: name.to_owned(),
+                        source: format!("{name}.glb").into(),
+                    },
+                )
+            })
+            .collect(),
+    };
+    let snapshot = catalog
+        .snapshot(Path::new("tests/fixtures/catalog.json"))
+        .unwrap();
     assert_eq!(snapshot.assets.len(), 3);
     let door = snapshot
         .assets

@@ -3,6 +3,15 @@ name = "roblox-asset-link"
 version = "0.1.0"
 edition = "2024"
 license = "MIT"
+autobins = false
+
+[[bin]]
+name = "roblox"
+path = "src/cli.rs"
+
+[[bin]]
+name = "roblox-server"
+path = "src/server.rs"
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }

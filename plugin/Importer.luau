@@ -87,7 +87,7 @@ local function build(asset: any, projectId: string): (Model, { EditableMesh })
 	local model = Instance.new("Model")
 	model.Name = asset.name
 	model:SetAttribute(PROJECT_ATTRIBUTE, projectId)
-	model:SetAttribute(ASSET_ATTRIBUTE, asset.name)
+	model:SetAttribute(ASSET_ATTRIBUTE, asset.id)
 	model:SetAttribute(REVISION_ATTRIBUTE, asset.revision)
 	local meshes = {}
 	local ok, message = pcall(function()
@@ -107,7 +107,7 @@ end
 
 function Importer.sync(snapshot: any): number
 	assert(not RunService:IsRunning(), "Stop Play before syncing assets")
-	assert(snapshot.protocol == 1, "Unsupported Asset Link protocol")
+	assert(snapshot.protocol == 2, "Unsupported Studio adapter protocol")
 	local config = snapshot.config
 	local destination = game:GetService(config.destination)
 	local folder: Folder? = nil
@@ -139,9 +139,10 @@ function Importer.sync(snapshot: any): number
 	local present = {}
 	local ok, message = pcall(function()
 		for _, asset in snapshot.assets do
-			assert(not present[asset.name], `Duplicate asset: {asset.name}`)
-			present[asset.name] = true
-			local old = existing[asset.name]
+			assert(type(asset.id) == "string" and asset.id ~= "", "Asset identity is missing")
+			assert(not present[asset.id], `Duplicate asset: {asset.id}`)
+			present[asset.id] = true
+			local old = existing[asset.id]
 			-- Rebuild on plugin reload, because live EditableMesh references need rehydration.
 			if old and retained[old] and old:GetAttribute(REVISION_ATTRIBUTE) == asset.revision then
 				continue

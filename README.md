@@ -1,85 +1,131 @@
-# Roblox Asset Link
+# Roblox CLI (RobloxAssetLink repository)
 
-A small **Rust CLI + Luau Studio plugin** for local, edit-time GLB previews.
-No Electron, Node, cloud account, asset upload, or game-startup geometry generator.
-The implementation uses Roblox's `EditableMesh` and `CreateMeshPartAsync` APIs;
-Freeway's open-source workflow demonstrated this approach. This is a new
-implementation, not a bundled Freeway application.
+General-purpose, CLI-first Roblox tooling for agents and scripts. **Assets are
+the first command group, not the boundary of the tool.** This repository retains
+its original name while the implementation moves beyond the GLB-preview design.
 
-## Build and use
+## Executables and current scope
+
+- `roblox`: short-lived commands with JSON results, JSON errors on stderr, and
+  nonzero failure exits. Local asset catalog management does not require Studio,
+  a server, a plugin, Electron, or Node.
+- `roblox-server`: separate, optional Studio adapter process. Currently serves
+  explicit catalog entries and shares configuration editing with the plugin.
+- Luau plugin: Studio-side adapter. The existing mesh preview implementation is
+  still experimental; it is **not** proof of persistent asset import.
+
+**Implemented:** catalog initialization, registration, metadata/source editing,
+removal, listing, inspection, validation, and project configuration. Entries have
+stable IDs independent of filenames and display names. Commands explicitly report
+`scope: "assetCatalog"` and `studioApplied: false`.
+
+**Not implemented:** completed persistent Studio imports, publish/update of hosted
+assets, dependency-aware deletion of actual Roblox assets, scene placement,
+general Studio command execution, and command completion acknowledgments from
+Studio. Do not interpret catalog success as any of these outcomes.
+
+## Build
 
 ```sh
 cargo build --release --locked
 mkdir -p dist
 rojo build plugin.project.json -o dist/AssetLink.rbxm
-
-# Copy the example and adapt it for your project first.
-target/release/roblox-asset-link check /path/to/glbs --config /path/to/config.json
-target/release/roblox-asset-link serve /path/to/glbs --config /path/to/config.json
 ```
 
-Install `dist/AssetLink.rbxm` in Studio's **local Plugins folder**. For Wine,
-use that Studio installation's Plugins folder, not a Linux-native guessed path.
-Open the Asset Link toolbar panel. Enter the loopback URL and session token
-printed by `serve`, then Load configuration and Sync now. Grant the plugin its
-localhost HTTP permission if Studio prompts. No Roblox credentials are needed.
+The Rust binaries are `target/release/roblox` and `target/release/roblox-server`.
+There is no combined `serve` subcommand in the CLI. Tool versions for plugin
+build/lint are recorded in `rokit.toml`.
 
-The session token is deliberately not persisted in plugin settings. The bridge
-binds only IPv4 loopback. Browser-origin requests are rejected; all routes require
-the token. It serves only top-level `.glb` files from the selected directory;
-symlinks and external GLB buffers are not followed. The only writable path is the
-explicit configuration file. Stop the CLI with Ctrl-C.
+## CLI workflow
 
-Live sync polls at the configured interval, stops on errors, and pauses in Play.
-Errors appear in both the panel and Studio Output. A malformed asset prevents a
-partial snapshot. Unchanged asset revisions are not rebuilt within a session.
+```sh
+roblox capabilities
+roblox assets --catalog ./assets.json init --config ./project-settings.json
+roblox assets --catalog ./assets.json add ./models/door.glb --id door --name Door
+roblox assets --catalog ./assets.json list
+roblox assets --catalog ./assets.json inspect door
+roblox assets --catalog ./assets.json edit door --name Entrance
+roblox assets --catalog ./assets.json edit door --source ./models/door-v2.glb
+roblox assets --catalog ./assets.json validate
+roblox assets --catalog ./assets.json config
+roblox assets --catalog ./assets.json config --file ./revised-settings.json
+roblox assets --catalog ./assets.json remove door
+```
 
-## One project configuration
+`add` validates a GLB and registers its source; it does not move/copy/delete that
+source or upload it. Omit `--id` to generate a stable UUID. `edit` retains the ID.
+`remove` removes only the catalog entry, preserving source files and hosted
+assets. An active experimental preview sync will reconcile its managed templates
+to that catalog; it does not know about other scene references.
 
-`examples/building-kit.json` is an **example**, not built-in application policy.
-There are no built-in collision naming conventions or unit conversion settings.
-The file is required and validated. Unknown fields and invalid values fail.
+CLI source arguments are relative to the current working directory. Sources under
+the catalog directory are stored as catalog-relative paths; other sources use
+absolute paths. Missing sources fail validation but can still be removed from the
+catalog. **No directory scan implicitly registers files.**
 
-- `projectId`: stable ownership identity for this library. Do not change it after
-  importing; use another configuration for a different library.
-- `metresPerStud`: conversion at the import boundary; GLB coordinates are metres.
-- `pollSeconds`: live refresh interval, positive and finite.
-- `destination`: `Workspace`, `ServerStorage`, or `ReplicatedStorage`.
-- `containerName`: name of the plugin-managed asset library folder.
-- `defaultPart`: anchored, canCollide, canTouch, canQuery, doubleSided,
-  collisionFidelity, and transparency. `null` transparency uses material alpha.
-- `rules`: ordered mesh-node `namePrefix` rules, each with complete part settings.
-  The first match wins. An empty list disables naming rules entirely.
+CLI and adapter writes share an OS file lock and replace the catalog atomically.
+Initialization never overwrites an existing file. A failed edit leaves the catalog
+unchanged. Commit the JSON catalog and source files; the sibling `.json.lock` file
+is coordination state, not project data. External editors do not participate in
+the lock: avoid simultaneous manual writes while a CLI/UI operation is applying.
 
-The dockable plugin panel exposes the **same JSON**, including all rules, in a
-multiline editor. Apply validates it against the current assets and atomically
-replaces the config file. A revision check rejects edits based on a stale loaded
-configuration; reload after external edits. Avoid simultaneous external writes
-during Apply: the filesystem itself does not provide an external-editor CAS.
+## Data-driven configuration
 
-Each import preserves node transforms, normals, UVs, base colour, alpha, source
-origin/pivot, and configured collision properties. A separate model is created
-for each GLB. The library is a collection of templates, not a laid-out scene.
-The entire changed batch builds before existing templates are replaced; unrelated
-instances are not deleted. Existing model placement is retained on replacement.
-Managed models and their contents are generated: author changes in Blender, not
-inside the managed templates. Copies outside the library are not live-linked.
+Use `examples/building-kit.json` as an editable example, not application policy.
+Initialization embeds that config in the catalog; the **catalog then becomes the
+single configuration source**. Both CLI and plugin edit its `config` member.
 
-## Scope and limitations
+- `projectId`: stable managed-library identity; changing it requires a new catalog.
+- `metresPerStud`: GLB metres to Studio units at the import boundary.
+- `pollSeconds`: positive live-preview polling interval.
+- `destination`: Workspace, ServerStorage, or ReplicatedStorage.
+- `containerName`: managed library folder name.
+- `defaultPart`: anchoring, collision/touch/query flags, double-sidedness,
+  collision fidelity, and transparency (`null` uses GLB material alpha).
+- `rules`: ordered mesh-name-prefix matches with complete part settings. First
+  match wins; an empty list disables naming rules.
 
-This first version supports static triangle geometry and untextured base-colour
-materials. Skins, animation, morph targets, required glTF extensions, textures,
-vertex colours, emissive materials, and alpha masks are rejected explicitly.
-PBR roughness/metalness are not reproduced; this is a geometry/base-colour preview.
-Normals and UV0 must be exported. Roblox's own mesh limits still apply; import
-failures preserve the preceding managed library.
+Unknown fields and invalid values are rejected. Configuration replacement
+validates existing registered geometry before committing.
 
-**Preview is not publication.** No assets are uploaded. Live EditableMesh
-references are rebuilt when syncing after a plugin reload. Do not treat a saved
-place or `.rbxm` containing this preview as a tested portable/publishable asset.
-Studio Play behaviour, save/reopen behaviour, collision cooking, and undo require
-live acceptance testing on the installed Studio version. These have not yet been
-verified by the CLI/packaging tests.
+## Optional development adapter
+
+```sh
+roblox-server --catalog ./assets.json --port 34873
+```
+
+The server binds IPv4 loopback, prints a per-session token, rejects browser-origin
+requests, and requires that token on every request. It reads only explicitly
+registered sources. Source GLBs must be self-contained; external buffers are
+rejected. `/config` edits only the selected catalog, under the same lock as the
+CLI; a revision check rejects stale panel edits. It cannot upload assets.
+
+Install `dist/AssetLink.rbxm` in the actual Studio local Plugins folder (the Wine
+installation's folder when applicable). Enter the printed endpoint/token in its
+panel. The panel exposes configuration and experimental preview controls.
+Snapshots carry stable catalog IDs; renaming no longer changes template identity.
+
+The adapter's static GLB path preserves geometry transforms, normals, UVs, base
+colour, alpha, and origin/pivot. It rejects unsupported skins, animation, morphs,
+required extensions, textures, vertex colours, emissive materials, and alpha masks.
+It does not reproduce PBR roughness/metalness. The plugin remains unverified for
+live Studio import, collision, save/reopen, Play, and undo. It must not be shipped
+as a completed persistent-import solution. No runtime game script is generated.
+
+## Existing automation and next boundary
+
+Roblox has a [built-in Studio MCP server](https://create.roblox.com/docs/studio/mcp)
+for script/data-model editing and playtesting. Roblox's earlier
+[Rust MCP reference server](https://github.com/Roblox/studio-rust-mcp-server) is
+archived in favor of that built-in implementation. [Lune](https://lune-org.github.io/docs/roblox/1-introduction/)
+provides offline place/model manipulation. Prefer these supported capabilities
+where appropriate; do not invent another general transport merely because this
+repository started with a local asset adapter.
+
+The next boundary is a CLI-addressable Studio session with explicit request IDs,
+structured results, and honest failure/completion reporting. Persistent import
+must be verified with save/reopen and Play **without the bridge running** before
+an `import` command may report success. Publishing is an explicit separate action.
 
 ## Validation
 
@@ -92,8 +138,6 @@ selene plugin
 rojo build plugin.project.json -o dist/AssetLink.rbxm
 ```
 
-Tests include actual Blender-exported GLBs, non-default units and naming rules,
-transform math, invalid configuration, authenticated HTTP requests, and disk
-configuration updates with stale-edit rejection. The initial LayerOne kit also
-passed parsing: **20 assets, 72 meshes, 1,032 triangles**. Plugin packaging/linting
-is not a substitute for live Studio testing.
+Tests exercise real Blender GLBs, non-default conventions, CLI lifecycle and
+rollback, missing sources, explicit registration, concurrent CLI writers, and
+authenticated server/configuration operations. Packaging is not live acceptance.

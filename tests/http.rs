@@ -39,9 +39,23 @@ fn request(
 fn executable_serves_assets_and_updates_only_authorized_configuration() {
     let temporary = tempfile::tempdir().unwrap();
     let config = temporary.path().join("config.json");
-    std::fs::write(&config, include_str!("../examples/building-kit.json")).unwrap();
-    let child = Command::new(env!("CARGO_BIN_EXE_roblox-asset-link"))
-        .args(["serve", "tests/fixtures", "--port", "0", "--config"])
+    let settings = serde_json::from_str(include_str!("../examples/building-kit.json")).unwrap();
+    roblox_asset_link::catalog::initialize(&config, settings).unwrap();
+    roblox_asset_link::catalog::mutate(&config, None, |catalog| {
+        for name in ["doorway", "glass", "stair"] {
+            catalog.assets.insert(
+                name.to_owned(),
+                roblox_asset_link::catalog::Entry {
+                    name: name.to_owned(),
+                    source: std::fs::canonicalize(format!("tests/fixtures/{name}.glb"))?,
+                },
+            );
+        }
+        Ok(())
+    })
+    .unwrap();
+    let child = Command::new(env!("CARGO_BIN_EXE_roblox-server"))
+        .args(["--port", "0", "--catalog"])
         .arg(&config)
         .stderr(Stdio::piped())
         .spawn()
@@ -52,7 +66,7 @@ fn executable_serves_assets_and_updates_only_authorized_configuration() {
     reader.read_line(&mut line).unwrap();
     let address = line
         .trim()
-        .strip_prefix("Asset Link: http://")
+        .strip_prefix("Studio adapter: http://")
         .unwrap()
         .to_owned();
     line.clear();
@@ -90,5 +104,5 @@ fn executable_serves_assets_and_updates_only_authorized_configuration() {
         422
     );
     let disk: serde_json::Value = serde_json::from_slice(&std::fs::read(config).unwrap()).unwrap();
-    assert_eq!(disk["pollSeconds"], 9.);
+    assert_eq!(disk["config"]["pollSeconds"], 9.);
 }

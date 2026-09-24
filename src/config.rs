@@ -1,6 +1,5 @@
 use crate::Result;
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 use std::{fs, path::Path};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -81,10 +80,6 @@ impl Config {
             .find(|r| name.starts_with(&r.name_prefix))
             .map_or(&self.default_part, |r| &r.settings)
             .clone()
-    }
-
-    pub fn revision(&self) -> Result<String> {
-        Ok(format!("{:x}", Sha256::digest(serde_json::to_vec(self)?)))
     }
 }
 

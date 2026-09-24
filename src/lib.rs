@@ -2,6 +2,7 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::{fs, path::Path};
 
+pub mod catalog;
 pub mod config;
 use config::{Config, PartSettings};
 
@@ -22,6 +23,7 @@ pub struct Mesh {
 #[derive(Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct Asset {
+    pub id: String,
     pub name: String,
     pub revision: String,
     pub meshes: Vec<Mesh>,
@@ -225,6 +227,7 @@ pub fn read_asset(path: &Path, config: &Config) -> Result<Asset> {
     hash.update(&bytes);
     hash.update(serde_json::to_vec(config)?);
     Ok(Asset {
+        id: String::new(),
         name: path
             .file_stem()
             .and_then(|n| n.to_str())
@@ -232,29 +235,6 @@ pub fn read_asset(path: &Path, config: &Config) -> Result<Asset> {
             .to_owned(),
         revision: format!("{:x}", hash.finalize()),
         meshes,
-    })
-}
-
-pub fn snapshot(directory: &Path, config: &Config) -> Result<Snapshot> {
-    config.validate()?;
-    let mut paths = Vec::new();
-    for entry in fs::read_dir(directory)? {
-        let entry = entry?;
-        if entry.file_type()?.is_file() && entry.path().extension().is_some_and(|e| e == "glb") {
-            paths.push(entry.path());
-        }
-    }
-    paths.sort();
-    let mut assets = Vec::new();
-    for path in paths {
-        assets.push(
-            read_asset(&path, config).map_err(|error| format!("{}: {error}", path.display()))?,
-        );
-    }
-    Ok(Snapshot {
-        protocol: 1,
-        config: config.clone(),
-        assets,
     })
 }
 
@@ -302,18 +282,12 @@ mod tests {
     }
 
     #[test]
-    fn directory_errors_are_not_silently_empty_snapshots() {
+    fn unreadable_assets_fail_validation() {
         let config: Config =
             serde_json::from_str(include_str!("../examples/building-kit.json")).unwrap();
-        assert!(snapshot(Path::new("absent-directory"), &config).is_err());
+        assert!(read_asset(Path::new("absent.glb"), &config).is_err());
         let directory = tempfile::tempdir().unwrap();
         fs::write(directory.path().join("broken.glb"), b"bad glb").unwrap();
-        assert!(
-            snapshot(directory.path(), &config)
-                .err()
-                .unwrap()
-                .to_string()
-                .contains("broken.glb")
-        );
+        assert!(read_asset(&directory.path().join("broken.glb"), &config).is_err());
     }
 }
