@@ -1,0 +1,16 @@
+[package]
+name = "roblox-asset-link"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+gltf = { version = "1.4", default-features = false, features = ["utils", "names"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+tiny_http = "0.12"
+uuid = { version = "1", features = ["v4"] }
+
+tempfile = "3"
