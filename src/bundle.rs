@@ -13,6 +13,15 @@ use std::{
 pub struct Plan {
     pub assets: Vec<Asset>,
     pub scenes: Vec<Scene>,
+    pub cache: Option<crate::build_cache::Config>,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct CachedAsset {
+    generated: Vec<String>,
+    rig: Option<crate::animation::Rig>,
+    skin: Option<crate::skin_import::Manifest>,
 }
 
 #[derive(Deserialize)]
@@ -346,7 +355,9 @@ fn build_asset(
 pub fn build(source: &Path, output: &Path) -> Result<Manifest> {
     let source = source.canonicalize()?;
     let root = source.parent().ok_or("bundle source directory missing")?;
-    let plan: Plan = serde_json::from_slice(&fs::read(&source)?)?;
+    let plan_bytes = fs::read(&source)?;
+    let plan: Plan = serde_json::from_slice(&plan_bytes)?;
+    let raw_plan: serde_json::Value = serde_json::from_slice(&plan_bytes)?;
     let mut ids = HashSet::new();
     for id in plan.assets.iter().map(|v| &v.id) {
         if id.is_empty() || !ids.insert(id) {
@@ -364,13 +375,24 @@ pub fn build(source: &Path, output: &Path) -> Result<Manifest> {
     }
     let ordered = ordered_assets(&plan)?;
     let inputs = crate::bundle_inputs::collect(&source, &plan)?;
+    if inputs.plan_sha256 != format!("{:x}", Sha256::digest(&plan_bytes)) {
+        return Err("bundle plan changed during source inventory".into());
+    }
     fs::create_dir(output)?;
     let result = (|| -> Result<Manifest> {
+        let cache = plan
+            .cache
+            .as_ref()
+            .map(|config| crate::build_cache::Cache::open(&root.join(&config.directory), output))
+            .transpose()?;
         fs::create_dir(output.join("assets"))?;
         fs::create_dir(output.join("scenes"))?;
         let mut bindings = scene::AssetMap::new();
         let mut files = Vec::new();
         let mut skins = HashMap::new();
+        let mut cache_keys = HashMap::new();
+        let mut cache_hits = Vec::new();
+        let mut cache_misses = Vec::new();
         for asset in ordered {
             let directory = format!("assets/{}", key(&asset.id));
             let mut rig = None;
@@ -378,15 +400,62 @@ pub fn build(source: &Path, output: &Path) -> Result<Manifest> {
             let target = bind_target(asset)
                 .map(|id| skins.get(id).ok_or("skin dependency was not converted"))
                 .transpose()?;
-            let generated = build_asset(
-                root,
-                &output.join(&directory),
-                asset,
-                &format!("rbxasset://{directory}/"),
-                &mut rig,
-                target,
-                &mut skin,
-            )?;
+            let cache_key = if let Some(cache) = &cache {
+                let definition = raw_plan["assets"]
+                    .as_array()
+                    .ok_or("missing asset definitions")?
+                    .iter()
+                    .find(|value| value["id"].as_str() == Some(&asset.id))
+                    .ok_or("missing asset definition")?;
+                let dependency = bind_target(asset)
+                    .map(|id| cache_keys.get(id).ok_or("missing dependency cache key"))
+                    .transpose()?;
+                Some(crate::build_cache::digest(&serde_json::json!({
+                    "protocol":"roblox-asset-cache-v1", "toolchain":cache.toolchain,
+                    "asset":definition, "inputs":inputs.assets[&asset.id], "dependency":dependency
+                }))?)
+            } else {
+                None
+            };
+            let restored = match (&cache, &cache_key) {
+                (Some(cache), Some(key)) => cache.restore(key, &output.join(&directory))?,
+                _ => None,
+            };
+            let generated = if let Some(metadata) = restored {
+                let restored: CachedAsset = serde_json::from_value(metadata)?;
+                rig = restored.rig;
+                skin = restored.skin;
+                cache_hits.push(asset.id.clone());
+                restored.generated
+            } else {
+                let generated = build_asset(
+                    root,
+                    &output.join(&directory),
+                    asset,
+                    &format!("rbxasset://{directory}/"),
+                    &mut rig,
+                    target,
+                    &mut skin,
+                )?;
+                if let (Some(cache), Some(key)) = (&cache, &cache_key) {
+                    // Recheck source closure before publishing this immutable entry.
+                    if crate::bundle_inputs::collect(&source, &plan)? != inputs {
+                        return Err("bundle source inputs changed during conversion".into());
+                    }
+                    cache.store(
+                        key,
+                        &output.join(&directory),
+                        serde_json::json!({
+                            "generated":generated,"rig":rig,"skin":skin
+                        }),
+                    )?;
+                    cache_misses.push(asset.id.clone());
+                }
+                generated
+            };
+            if let Some(key) = cache_key {
+                cache_keys.insert(asset.id.clone(), key);
+            }
             if let Some(skin) = skin {
                 skins.insert(asset.id.clone(), skin);
             }
@@ -450,6 +519,14 @@ pub fn build(source: &Path, output: &Path) -> Result<Manifest> {
             output.join("build-inputs.json"),
             serde_json::to_vec_pretty(&inputs)?,
         )?;
+        if cache.is_some() {
+            fs::write(
+                output.join("cache-report.json"),
+                serde_json::to_vec_pretty(&serde_json::json!({
+                    "hits":cache_hits,"misses":cache_misses
+                }))?,
+            )?;
+        }
         fs::write(
             output.join("manifest.json"),
             serde_json::to_vec_pretty(&manifest)?,

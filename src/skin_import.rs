@@ -19,7 +19,7 @@ pub struct Config {
     pub rigid_tolerance: f32,
 }
 
-#[derive(Serialize)]
+#[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Binding {
     pub source_node: usize,
@@ -29,7 +29,7 @@ pub struct Binding {
     pub local_bind_cframe: [f32; 12],
 }
 
-#[derive(Serialize)]
+#[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Entry {
     pub file: String,
@@ -43,10 +43,10 @@ pub struct Entry {
     pub double_sided: bool,
 }
 
-#[derive(Serialize)]
+#[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Manifest {
-    pub format: &'static str,
+    pub format: String,
     pub metres_per_stud: f32,
     pub rig: Vec<Binding>,
     pub meshes: Vec<Entry>,
@@ -301,7 +301,7 @@ pub(crate) fn write(
 ) -> Result<Manifest> {
     let rig = crate::rig_asset::encode(&bindings)?;
     let manifest = Manifest {
-        format: "roblox-skinned-mesh-v4.01",
+        format: "roblox-skinned-mesh-v4.01".into(),
         metres_per_stud,
         rig: bindings,
         meshes,

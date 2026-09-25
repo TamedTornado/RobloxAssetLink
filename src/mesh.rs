@@ -28,7 +28,7 @@ pub struct Mesh {
 }
 
 /// Axis-aligned bounds in the encoded mesh coordinate space, in studs.
-#[derive(Clone, Debug, serde::Serialize, PartialEq)]
+#[derive(Clone, Debug, serde::Deserialize, serde::Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Bounds {
     pub min: [f32; 3],

@@ -221,7 +221,7 @@ mod tests {
             }],
         };
         let skin = skin_import::Manifest {
-            format: "roblox-skinned-mesh-v4.01",
+            format: "roblox-skinned-mesh-v4.01".into(),
             metres_per_stud: 0.5,
             rig: vec![skin_import::Binding {
                 source_node: 10,

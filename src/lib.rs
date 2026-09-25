@@ -7,6 +7,7 @@ pub mod animation_fbx;
 pub mod animation_gltf;
 mod animation_rebase;
 pub mod audio;
+pub mod build_cache;
 pub mod bundle;
 mod bundle_inputs;
 pub mod bundle_verify;
