@@ -1,12 +1,10 @@
 //! In-process FBX motion baking into explicitly sampled native rigid poses.
 use crate::{
     Result,
-    animation::{self, Clip, Frame, Pose},
-    animation_gltf::Binding,
+    animation::{self, Clip, Frame, Pose, Rig, RigBinding},
 };
 use glam::{Mat3, Mat4, Quat, Vec3};
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 use std::{
     collections::{BTreeMap, HashSet},
     fs,
@@ -34,7 +32,7 @@ pub struct Config {
 pub struct Manifest {
     pub artifact: animation::Manifest,
     pub config: Config,
-    pub rig: Vec<Binding>,
+    pub rig: Rig,
     pub rig_sha256: String,
     pub source_time_begin: f64,
     pub sampled_approximation: bool,
@@ -342,7 +340,36 @@ pub fn convert(source: &Path, output: &Path, config: Config) -> Result<Manifest>
         .anim_stacks
         .get(config.animation_index)
         .ok_or("FBX animationIndex is absent")?;
+    if !scene.constraints.is_empty() {
+        return Err(
+            "FBX constraints require baking in the source before rigid animation conversion".into(),
+        );
+    }
     let joints = skeleton(&scene, &config)?;
+    let root = &scene.nodes[config.root_node];
+    let mut root_parent = Mat4::IDENTITY;
+    if let Some(parent) = &root.parent {
+        let m = &parent.node_to_world;
+        root_parent = Mat4::from_cols_array(&[
+            m.m00 as f32,
+            m.m10 as f32,
+            m.m20 as f32,
+            0.,
+            m.m01 as f32,
+            m.m11 as f32,
+            m.m21 as f32,
+            0.,
+            m.m02 as f32,
+            m.m12 as f32,
+            m.m22 as f32,
+            0.,
+            m.m03 as f32 / config.metres_per_stud,
+            m.m13 as f32 / config.metres_per_stud,
+            m.m23 as f32 / config.metres_per_stud,
+            1.,
+        ]);
+    }
+    crate::rigid::validate(root_parent, config.rigid_tolerance)?;
     let unchanged_properties = validate_channels(stack, &joints)?;
     let baked = ufbx::bake_anim(
         &scene,
@@ -391,14 +418,18 @@ pub fn convert(source: &Path, output: &Path, config: Config) -> Result<Manifest>
     }
     let rig: Vec<_> = joints
         .into_iter()
-        .map(|(node_index, joint)| Binding {
+        .map(|(node_index, joint)| RigBinding {
             node_index,
             name: joint.name,
             parent_node: joint.parent,
             rest_cframe: cframe(joint.rest),
         })
         .collect();
-    let rig_sha256 = format!("{:x}", Sha256::digest(serde_json::to_vec(&rig)?));
+    let rig = Rig {
+        root_parent_cframe: cframe(root_parent),
+        joints: rig,
+    };
+    let rig_sha256 = rig.sha256()?;
     let clip = Clip {
         name: config.name.clone(),
         looped: config.looped,

@@ -90,8 +90,14 @@ fn unchanged_khronos_clip_reconstructs_source_motion_after_native_round_trip() {
     assert_eq!(clip.frames.len(), 50);
     assert_eq!(times.len(), clip.frames.len());
     assert_eq!(rotations.len(), clip.frames.len());
-    assert_eq!(rig[0].node_index, 3);
-    assert_eq!(rig[1].parent_node, Some(3));
+    assert_eq!(rig.joints[0].node_index, 3);
+    assert_eq!(rig.joints[1].parent_node, Some(3));
+    let units = Mat4::from_scale(Vec3::splat(1. / policy.metres_per_stud));
+    let source_parent =
+        Mat4::from_cols_array_2d(&gltf.nodes().next().unwrap().transform().matrix())
+            * Mat4::from_cols_array_2d(&gltf.nodes().nth(1).unwrap().transform().matrix());
+    let expected_parent = units * source_parent * units.inverse();
+    assert!(transform(rig.root_parent_cframe).abs_diff_eq(expected_parent, policy.rigid_tolerance));
     let directory = tempfile::tempdir().unwrap();
     let output = directory.path().join("motion.rbxm");
     let manifest = animation_gltf::convert(&source, &output, policy.clone()).unwrap();
@@ -116,12 +122,19 @@ fn unchanged_khronos_clip_reconstructs_source_motion_after_native_round_trip() {
         let pose = transform([
             r.x.x, r.x.y, r.x.z, r.y.x, r.y.y, r.y.z, r.z.x, r.z.y, r.z.z, p.x, p.y, p.z,
         ]);
-        let reconstructed = transform(rig[1].rest_cframe) * pose;
+        let reconstructed = transform(rig.joints[1].rest_cframe) * pose;
         let expected = Mat4::from_rotation_translation(
             Quat::from_array(rotations[index]).normalize(),
             Vec3::from_array(translations[index]) / policy.metres_per_stud,
         );
         assert!(reconstructed.abs_diff_eq(expected, policy.rigid_tolerance));
+        let root_rest =
+            Mat4::from_cols_array_2d(&gltf.nodes().nth(3).unwrap().transform().matrix());
+        let expected_world = expected_parent * (units * root_rest * units.inverse()) * expected;
+        let native_world = transform(rig.root_parent_cframe)
+            * transform(rig.joints[0].rest_cframe)
+            * reconstructed;
+        assert!(native_world.abs_diff_eq(expected_world, policy.rigid_tolerance));
     }
     let second =
         animation_gltf::convert(&source, &directory.path().join("second.rbxm"), policy).unwrap();
@@ -167,6 +180,56 @@ fn configured_tolerance_accepts_only_identity_scale_roundoff() {
 }
 
 #[test]
+fn root_parent_placement_is_preserved_hashed_and_validated() {
+    let directory = tempfile::tempdir().unwrap();
+    let root = directory.path();
+    let mut document = fixture(root);
+    document["nodes"].as_array_mut().unwrap().push(json!({
+        "name":"Placement","translation":[5.,6.,7.],"children":[0]
+    }));
+    let source = root.join("placed.gltf");
+    fs::write(&source, serde_json::to_vec(&document).unwrap()).unwrap();
+    let first = animation_gltf::convert(&source, &root.join("first.rbxm"), config()).unwrap();
+    assert_eq!(&first.rig.root_parent_cframe[9..], [10., 12., 14.]);
+    assert_eq!(first.rig_sha256, first.rig.sha256().unwrap());
+
+    document["nodes"][2]["translation"][0] = json!(8.);
+    fs::write(&source, serde_json::to_vec(&document).unwrap()).unwrap();
+    let second = animation_gltf::convert(&source, &root.join("second.rbxm"), config()).unwrap();
+    assert_ne!(first.rig_sha256, second.rig_sha256);
+    assert_eq!(first.artifact.sha256, second.artifact.sha256);
+
+    document["nodes"][2]["scale"] = json!([2., 1., 1.]);
+    fs::write(&source, serde_json::to_vec(&document).unwrap()).unwrap();
+    let bad = root.join("bad.rbxm");
+    assert!(
+        animation_gltf::convert(&source, &bad, config())
+            .err()
+            .unwrap()
+            .to_string()
+            .contains("rigid transforms")
+    );
+    assert!(!bad.exists());
+    document["nodes"][2]
+        .as_object_mut()
+        .unwrap()
+        .remove("scale");
+    document["nodes"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!({"name":"OtherParent","children":[0]}));
+    fs::write(&source, serde_json::to_vec(&document).unwrap()).unwrap();
+    assert!(
+        animation_gltf::convert(&source, &bad, config())
+            .err()
+            .unwrap()
+            .to_string()
+            .contains("multiple parents")
+    );
+    assert!(!bad.exists());
+}
+
+#[test]
 fn source_sampling_converts_rest_space_units_hierarchy_and_slerp() {
     let directory = tempfile::tempdir().unwrap();
     let source = directory.path().join("motion.gltf");
@@ -180,8 +243,8 @@ fn source_sampling_converts_rest_space_units_hierarchy_and_slerp() {
         clip.frames.iter().map(|f| f.time).collect::<Vec<_>>(),
         [0., 1., 2.]
     );
-    assert_eq!(rig[1].parent_node, Some(0));
-    near(rig[1].rest_cframe[10], 2.);
+    assert_eq!(rig.joints[1].parent_node, Some(0));
+    near(rig.joints[1].rest_cframe[10], 2.);
     let start = &clip.frames[0].poses[0];
     near(start.cframe[0], 1.);
     near(start.cframe[9], 0.);
@@ -332,7 +395,7 @@ fn gltf_animation_cli_and_bundle_match_without_external_tools() {
         .unwrap();
     assert!(result.status.success(), "{:?}", result.stderr);
     let response: Value = serde_json::from_slice(&result.stdout).unwrap();
-    assert_eq!(response["result"]["rig"][1]["parentNode"], 0);
+    assert_eq!(response["result"]["rig"]["joints"][1]["parentNode"], 0);
     let plan = json!({"assets":[{"id":"motion","conversion":{
         "kind":"animationGltf","source":"motion.gltf","config":config()
     }}],"scenes":[]});

@@ -49,10 +49,10 @@ rest transforms. Every selected clip channel must belong to it. No source nodes 
 silently removed or retargeted. Source right-handed Y-up coordinates are retained;
 metres become studs at the boundary. Each output pose is
 `inverse(localRest) * localAnimated`, not the absolute source transform. The
-result manifest records node indices, parents, names and local rest CFrames for
+result manifest's `rig.joints` records node indices, parents, names and local rest CFrames for
 binding against a target Bone hierarchy. The target must use that hierarchy/rest
 data; an arbitrary existing rig is not automatically compatible. `rigSha256`
-identifies the serialized rig metadata for stable dependency tracking; it does
+identifies the complete rig metadata for stable dependency tracking; it does
 not assert that an independently built target rig has been checked against it.
 
 The importer rejects STEP/CUBICSPLINE, non-identity scale/morph animation,
@@ -115,6 +115,31 @@ first/last times, repeated bytes and rig hashes, higher sampling rates, explicit
 output budgets, no-overwrite behavior, CLI/bundle parity and the metadata proof.
 Builds use neither a codec subprocess, Studio nor a remote conversion service.
 
-Remaining: complete target-rig binding, including the selected root's external
-parent transform, scene Bone/animation wiring and native playback acceptance.
-Issue 4 remains open; local pose tests alone do not establish whole-rig placement.
+## Root context and target binding
+
+Both source converters emit the same `rig` contract: `rootParentCframe` plus
+`joints`. CFrames contain nine row-major rotation components followed by three
+translation components in studs. The parent CFrame preserves the static ancestry
+above the selected root; roots without an external parent use identity. Animated
+out-of-rig ancestry is rejected, as are ambiguous, cyclic or non-rigid parents.
+The FBX profile also rejects constraints requiring source-side baking.
+
+Reconstruction is `rootParent * rootRest * rootPose`, followed recursively by
+each child's `rest * pose`. A target must preserve the joint names, hierarchy and
+rest basis. For an otherwise untransformed container, rootParent can be folded
+into the root Bone's rest CFrame; it must not also be applied to that hierarchy
+again. Arbitrary rig retargeting is not performed. Do not mistake a matching
+name for a matching rest basis or silently apply the clip to a different rig.
+
+The fingerprint hashes JSON serialization of the ordered pair
+`["roblox-animation-rig-v1", rig]`, including root context. A parent-placement
+change can leave native local pose bytes unchanged but must change this rig
+fingerprint. Tests explicitly verify that distinction, invalid parent rejection,
+and whole-hierarchy world-space reconstruction against both independent source
+fixtures, beyond merely testing local offsets.
+
+The source-animation conversion requirements of issue 4 are covered by these
+profiles, explicit unsupported-semantics failures, coordinate/time/interpolation
+documentation, native round trips and offline CLI/bundle tests. Native Bone
+instance construction and actual scene binding remain scene integration in
+issue 7; playback and cloud acceptance are not claimed by conversion tests.

@@ -74,7 +74,9 @@ fn compare_pose(
     scene: &ufbx::Scene,
     time: f64,
     scale: f32,
+    parents: (Mat4, Mat4),
 ) {
+    let (native_parent, source_parent) = parents;
     let pose = dom.get_by_ref(reference).unwrap();
     let (node, rest) = rig[pose.name.as_str()];
     let Variant::CFrame(offset) = &pose.properties[&"CFrame".into()] else {
@@ -106,8 +108,19 @@ fn compare_pose(
         "pose {} at {time}: native {actual:?}, source {expected:?}",
         pose.name
     );
+    let native_world = native_parent * actual;
+    let source_world = source_parent * expected;
+    assert!(native_world.abs_diff_eq(source_world, 0.002));
     for child in pose.children() {
-        compare_pose(dom, *child, rig, scene, time, scale);
+        compare_pose(
+            dom,
+            *child,
+            rig,
+            scene,
+            time,
+            scale,
+            (native_world, source_world),
+        );
     }
 }
 
@@ -128,6 +141,31 @@ fn fbx_clip_native_poses_match_source_evaluation_and_are_deterministic() {
     assert!(manifest.artifact.keyframes > 2);
     let dom = rbx_binary::from_reader(fs::read(&output).unwrap().as_slice()).unwrap();
     let sequence = dom.get_by_ref(dom.root().children()[0]).unwrap();
+    let mut parent = Mat4::IDENTITY;
+    if let Some(source_parent) = &scene.nodes[policy.root_node].parent {
+        let m = &source_parent.node_to_world;
+        parent = Mat4::from_cols_array(&[
+            m.m00 as f32,
+            m.m10 as f32,
+            m.m20 as f32,
+            0.,
+            m.m01 as f32,
+            m.m11 as f32,
+            m.m21 as f32,
+            0.,
+            m.m02 as f32,
+            m.m12 as f32,
+            m.m22 as f32,
+            0.,
+            m.m03 as f32 / policy.metres_per_stud,
+            m.m13 as f32 / policy.metres_per_stud,
+            m.m23 as f32 / policy.metres_per_stud,
+            1.,
+        ]);
+    }
+    let native_parent = transform(manifest.rig.root_parent_cframe);
+    assert!(native_parent.abs_diff_eq(parent, policy.rigid_tolerance));
+    assert_eq!(manifest.rig_sha256, manifest.rig.sha256().unwrap());
     let first = dom.get_by_ref(sequence.children()[0]).unwrap();
     let last = dom
         .get_by_ref(*sequence.children().last().unwrap())
@@ -139,6 +177,7 @@ fn fbx_clip_native_poses_match_source_evaluation_and_are_deterministic() {
     );
     let rig = manifest
         .rig
+        .joints
         .iter()
         .map(|bone| {
             (
@@ -159,6 +198,7 @@ fn fbx_clip_native_poses_match_source_evaluation_and_are_deterministic() {
             &scene,
             f64::from(time) + manifest.source_time_begin,
             policy.metres_per_stud,
+            (native_parent, parent),
         );
     }
     let repeated = directory.path().join("repeated.rbxm");

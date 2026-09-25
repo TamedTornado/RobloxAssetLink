@@ -10,6 +10,32 @@ use std::{collections::HashSet, fs, io::Write, path::Path};
 
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct RigBinding {
+    pub node_index: usize,
+    pub name: String,
+    pub parent_node: Option<usize>,
+    pub rest_cframe: [f32; 12],
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct Rig {
+    /// Static transform above the selected joint root, in output stud units.
+    pub root_parent_cframe: [f32; 12],
+    pub joints: Vec<RigBinding>,
+}
+
+impl Rig {
+    pub fn sha256(&self) -> Result<String> {
+        Ok(format!(
+            "{:x}",
+            Sha256::digest(serde_json::to_vec(&("roblox-animation-rig-v1", self))?)
+        ))
+    }
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Clip {
     pub name: String,
     pub looped: bool,

@@ -1,13 +1,12 @@
 //! Rigid skeletal glTF animation: local TR -> rest-relative Roblox poses.
 use crate::{
     Result,
-    animation::{self, Clip, Frame, Pose},
+    animation::{self, Clip, Frame, Pose, Rig, RigBinding},
     convert::load_gltf_buffers,
 };
 use glam::{Mat3, Mat4, Quat, Vec3};
 use gltf::animation::{Interpolation, util::ReadOutputs};
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 use std::{
     collections::{BTreeMap, HashSet},
     fs,
@@ -28,19 +27,10 @@ pub struct Config {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct Binding {
-    pub node_index: usize,
-    pub name: String,
-    pub parent_node: Option<usize>,
-    pub rest_cframe: [f32; 12],
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
 pub struct Manifest {
     pub artifact: animation::Manifest,
     pub config: Config,
-    pub rig: Vec<Binding>,
+    pub rig: Rig,
     pub rig_sha256: String,
 }
 
@@ -266,7 +256,41 @@ fn pose(index: usize, joints: &BTreeMap<usize, Joint>, tracks: &[Track], time: f
     }
 }
 
-pub fn read(source: &Path, config: &Config) -> Result<(Clip, Vec<Binding>)> {
+fn root_parent(document: &gltf::Document, config: &Config) -> Result<[f32; 12]> {
+    let mut parents = BTreeMap::new();
+    for node in document.nodes() {
+        for child in node.children() {
+            if parents.insert(child.index(), node.index()).is_some() {
+                return Err("animation hierarchy has multiple parents".into());
+            }
+        }
+    }
+    let mut visited = HashSet::from([config.root_node]);
+    let mut current = parents.get(&config.root_node).copied();
+    let mut world = Mat4::IDENTITY;
+    while let Some(index) = current {
+        if !visited.insert(index) {
+            return Err("animation ancestor hierarchy contains a cycle".into());
+        }
+        let node = document
+            .nodes()
+            .nth(index)
+            .ok_or("animation ancestor is absent")?;
+        if let gltf::scene::Transform::Decomposed { rotation, .. } = node.transform() {
+            quaternion(rotation, config.rigid_tolerance)?;
+        }
+        world = Mat4::from_cols_array_2d(&node.transform().matrix()) * world;
+        current = parents.get(&index).copied();
+    }
+    crate::rigid::validate(world, config.rigid_tolerance)?;
+    let position = world.w_axis.truncate() / config.metres_per_stud;
+    if !position.is_finite() {
+        return Err("animation parent translation overflows selected units".into());
+    }
+    Ok(cframe(Quat::from_mat4(&world).normalize(), position))
+}
+
+pub fn read(source: &Path, config: &Config) -> Result<(Clip, Rig)> {
     crate::rigid::validate(Mat4::IDENTITY, config.rigid_tolerance)?;
     if !config.metres_per_stud.is_finite() || config.metres_per_stud <= 0. {
         return Err("metresPerStud must be finite and positive".into());
@@ -276,6 +300,7 @@ pub fn read(source: &Path, config: &Config) -> Result<(Clip, Vec<Binding>)> {
         return Err("animation glTF extensions are not supported".into());
     }
     let buffers = load_gltf_buffers(source, &gltf)?;
+    let root_parent_cframe = root_parent(&gltf.document, config)?;
     let joints = skeleton(
         &gltf.document,
         config.root_node,
@@ -310,7 +335,7 @@ pub fn read(source: &Path, config: &Config) -> Result<(Clip, Vec<Binding>)> {
         .collect();
     let rig = joints
         .into_iter()
-        .map(|(node_index, joint)| Binding {
+        .map(|(node_index, joint)| RigBinding {
             node_index,
             name: joint.name,
             parent_node: joint.parent,
@@ -324,13 +349,16 @@ pub fn read(source: &Path, config: &Config) -> Result<(Clip, Vec<Binding>)> {
             priority: config.priority.clone(),
             frames,
         },
-        rig,
+        Rig {
+            root_parent_cframe,
+            joints: rig,
+        },
     ))
 }
 
 pub fn convert(source: &Path, output: &Path, config: Config) -> Result<Manifest> {
     let (clip, rig) = read(source, &config)?;
-    let rig_sha256 = format!("{:x}", Sha256::digest(serde_json::to_vec(&rig)?));
+    let rig_sha256 = rig.sha256()?;
     let artifact = animation::write_clip(&fs::read(source)?, &clip, output)?;
     Ok(Manifest {
         artifact,
