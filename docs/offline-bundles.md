@@ -1,5 +1,23 @@
 # Asset-linked offline bundles — issues 7 and 8
 
+## Read-only bundle verification
+
+`roblox verify-bundle DIRECTORY` checks the versioned manifest, unique artifact
+identities and paths, contained regular files, matching local URIs and SHA-256
+hashes. It parses every listed RBXM/RBXL artifact and checks bundle-owned local
+content references against the artifact inventory. Nonempty external references
+(including engine built-ins) are reported, never fetched or declared verified.
+Instance and content-object references must resolve within their native container.
+
+This command does not modify the bundle or require credentials, Studio or network
+access. It verifies runtime artifacts listed in the top-level manifest, not source
+inputs or unlisted conversion sidecars. It is not a signature/authenticity check:
+someone who changes both a file and its manifest hash can pass the hash check.
+Parsing a native container is not codec, rendering, physics or publishing proof;
+the result always reports `engineVerified: false`. Incremental cache reuse is
+separate unfinished work and must additionally validate source dependencies,
+conversion metadata and tool/configuration fingerprints.
+
 `roblox build bundle build.json --output NEW_DIRECTORY` converts declared assets
 and assembles native scenes in one local invocation. The plan contains `assets`
 and `scenes` lists, each with explicit logical ids. Asset conversions select

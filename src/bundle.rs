@@ -87,10 +87,10 @@ pub struct Scene {
     pub source: PathBuf,
 }
 
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Manifest {
-    pub format: &'static str,
+    pub format: String,
     pub version: u32,
     pub files: Vec<Artifact>,
     pub scenes: Vec<SceneArtifact>,
@@ -98,8 +98,8 @@ pub struct Manifest {
     pub engine_verified: bool,
 }
 
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Artifact {
     pub asset: String,
     pub file: String,
@@ -108,13 +108,13 @@ pub struct Artifact {
     pub sha256: String,
 }
 
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SceneArtifact {
     pub id: String,
     pub path: String,
     pub sha256: String,
-    pub format: &'static str,
+    pub format: String,
 }
 
 fn local(root: &Path, source: &Path) -> Result<PathBuf> {
@@ -431,11 +431,11 @@ pub fn build(source: &Path, output: &Path) -> Result<Manifest> {
                 id: input.id.clone(),
                 path,
                 sha256: scene.sha256,
-                format: scene.format,
+                format: scene.format.into(),
             });
         }
         let manifest = Manifest {
-            format: "roblox-offline-bundle",
+            format: "roblox-offline-bundle".into(),
             version: 1,
             files,
             scenes,

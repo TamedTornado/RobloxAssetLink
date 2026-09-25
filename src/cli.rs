@@ -20,6 +20,8 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
+    /// Verify a local bundle's declared runtime hashes and native references.
+    VerifyBundle { directory: PathBuf },
     /// Compile Luau locally without executing source.
     Compile {
         source: PathBuf,
@@ -385,6 +387,10 @@ fn execute(cli: Cli) -> Result<Value> {
         let config = serde_json::from_slice(&std::fs::read(config)?)?;
         let manifest = roblox_asset_link::media_transcode::convert(source, output, &config)?;
         return Ok(json!({"ok":true,"scope":"offlineConversion","result":manifest}));
+    }
+    if let Command::VerifyBundle { directory } = &cli.command {
+        let result = roblox_asset_link::bundle_verify::verify(directory)?;
+        return Ok(json!({"ok":true,"scope":"offlineBundleVerification","result":result}));
     }
     let Command::Assets {
         catalog: path,
