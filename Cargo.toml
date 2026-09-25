@@ -3,6 +3,8 @@ name = "roblox-asset-link"
 version = "0.1.0"
 edition = "2024"
 license = "MIT"
+description = "Offline Roblox asset conversion and native game assembly"
+repository = "https://github.com/TamedTornado/RobloxToolchain"
 autobins = false
 
 [[bin]]

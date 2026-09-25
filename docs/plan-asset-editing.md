@@ -50,5 +50,5 @@ acceptance. Empty plans are editable but cannot validate as a complete bundle.
 The CLI now uses this implementation exclusively. The old `--catalog`, preview
 configuration, geometry decoder and catalog schema have been removed, with no
 fallback or silent reinterpretation. Existing source assets and unrelated files
-are not migrated or deleted automatically. Issue 8 still needs its naming and
-final acceptance audit.
+are not migrated or deleted automatically. See the
+[bundle acceptance audit](bundle-acceptance.md) for issue 8's completed contract.

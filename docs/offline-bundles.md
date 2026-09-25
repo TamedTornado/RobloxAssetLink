@@ -6,6 +6,7 @@
 identities and paths, contained regular files, matching local URIs and SHA-256
 hashes. It parses every listed RBXM/RBXL artifact and checks bundle-owned local
 content references against the artifact inventory. Nonempty external references
+and canonical TexturePack channel dependencies are inspected. External references
 (including engine built-ins) are reported, never fetched or declared verified.
 Instance and content-object references must resolve within their native container.
 
@@ -92,7 +93,7 @@ fully precomputed contact geometry. Neither output establishes engine acceptance
 
 `material` accepts a `source` material JSON document as described in
 [texture/material conversion](texture-conversion.md). It emits a native
-SurfaceAppearance and all referenced normalized maps. The bundle linker replaces
+SurfaceAppearance, its native TexturePack descriptor and referenced maps. The bundle linker replaces
 the standalone document's URI prefix with the actual bundle asset directory
 before serializing the material. Maps appear individually in the top-level
 artifact manifest so deployment can resolve every dependency.

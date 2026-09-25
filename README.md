@@ -1,7 +1,7 @@
-# Roblox CLI
+# RobloxToolchain — `roblox` CLI
 
 General-purpose, agent-first **offline Roblox conversion and build tooling** in
-Rust. The public repository is currently named RobloxAssetLink. Project units,
+Rust. Public repository: [TamedTornado/RobloxToolchain](https://github.com/TamedTornado/RobloxToolchain). Project units,
 quality choices and resource budgets are configured in JSON, not tied to one game.
 
 Builds require no Studio, Roblox credentials or Roblox servers. Deployment is a
@@ -64,7 +64,7 @@ and dependency-aware removal. Validation executes a temporary offline build.
 The old GLB catalog, `--catalog` option, preview configuration and geometry decoder
 are removed; old documents are rejected rather than silently reinterpreted.
 
-Repository naming is also tracked under issue 8. Hosted asset upload, ID mapping,
+Hosted asset upload, ID mapping,
 place relinking and publishing are tracked under issue 9; no automatic publication
 is performed by any build command.
 
