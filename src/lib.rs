@@ -17,6 +17,7 @@ pub mod material_gltf;
 pub mod media_mux;
 pub mod media_transcode;
 pub mod mesh;
+mod rig_asset;
 pub mod rig_binding;
 mod rigid;
 pub mod scene;

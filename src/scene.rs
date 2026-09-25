@@ -44,6 +44,7 @@ pub struct Node {
     #[serde(default)]
     pub assets: BTreeMap<String, AssetReference>,
     pub material: Option<AssetReference>,
+    pub rig: Option<AssetReference>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord)]
@@ -193,6 +194,26 @@ fn insert(
         return Err("DataModel is the implicit root; do not nest it".into());
     }
     let mut builder = InstanceBuilder::new(node.class.as_str()).with_name(&node.name);
+    if let Some(rig) = &node.rig {
+        if node.class != "MeshPart" || node.children.iter().any(|child| child.class == "Bone") {
+            return Err(
+                "native rig attachment requires a MeshPart without explicit Bone children".into(),
+            );
+        }
+        let mesh = node
+            .assets
+            .get("MeshContent")
+            .ok_or("rig attachment requires an explicit MeshContent asset binding")?;
+        if mesh.asset != rig.asset || rig.file != "rig.rbxm" || mesh.file == rig.file {
+            return Err(
+                "rig attachment must use the same converted skin asset as MeshContent".into(),
+            );
+        }
+        let asset = assets.get(rig).ok_or("missing native rig asset")?;
+        for bone in crate::rig_asset::load(&asset.path)? {
+            builder = builder.with_child(bone);
+        }
+    }
     if let Some(material) = &node.material {
         if node.class != "MeshPart"
             || node
@@ -403,7 +424,10 @@ pub fn build_with_assets(source: &Path, output: &Path, assets: &AssetMap) -> Res
     let result = BuildResult {
         format,
         sha256: format!("{:x}", Sha256::digest(&bytes)),
-        instances: ids.len(),
+        instances: dom
+            .descendants()
+            .filter(|node| node.referent() != dom.root_ref())
+            .count(),
         bytes: bytes.len(),
         published: false,
     };

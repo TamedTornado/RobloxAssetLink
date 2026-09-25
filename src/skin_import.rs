@@ -50,6 +50,8 @@ pub struct Manifest {
     pub rig: Vec<Binding>,
     pub meshes: Vec<Entry>,
     pub engine_verified: bool,
+    pub rig_file: String,
+    pub rig_sha256: String,
 }
 
 pub(crate) fn validate_config(config: &Config) -> Result<()> {
@@ -279,26 +281,38 @@ fn convert_gltf(source: &Path, output: &Path, config: &Config) -> Result<Manifes
     if entries.is_empty() {
         return Err("skin mesh has no primitives".into());
     }
-    let manifest = Manifest {
-        format: "roblox-skinned-mesh-v4.01",
-        metres_per_stud: config.metres_per_stud,
-        rig: skeleton.bindings,
-        meshes: entries,
-        engine_verified: false,
-    };
-    write(output, manifest, files)
+    write(
+        output,
+        config.metres_per_stud,
+        skeleton.bindings,
+        entries,
+        files,
+    )
 }
 
 pub(crate) fn write(
     output: &Path,
-    manifest: Manifest,
+    metres_per_stud: f32,
+    bindings: Vec<Binding>,
+    meshes: Vec<Entry>,
     files: Vec<(String, Vec<u8>)>,
 ) -> Result<Manifest> {
+    let rig = crate::rig_asset::encode(&bindings)?;
+    let manifest = Manifest {
+        format: "roblox-skinned-mesh-v4.01",
+        metres_per_stud,
+        rig: bindings,
+        meshes,
+        engine_verified: false,
+        rig_file: "rig.rbxm".into(),
+        rig_sha256: format!("{:x}", Sha256::digest(&rig)),
+    };
     fs::create_dir(output)?;
     let result = (|| -> Result<()> {
         for (name, bytes) in files {
             fs::write(output.join(name), bytes)?;
         }
+        fs::write(output.join("rig.rbxm"), rig)?;
         fs::write(
             output.join("manifest.json"),
             serde_json::to_vec_pretty(&manifest)?,

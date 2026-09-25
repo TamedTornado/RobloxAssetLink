@@ -17,6 +17,7 @@ use std::collections::{HashMap, HashSet};
 pub struct Binding {
     pub animation: AssetReference,
     pub root: String,
+    pub bone: Option<String>,
     pub rigid_tolerance: f32,
 }
 
@@ -98,7 +99,25 @@ pub(crate) fn validate(
     let rig = asset.animation_rig.as_ref().ok_or(
         "animation binding needs source rig metadata from animationGltf/animationFbx conversion",
     )?;
-    validate_rig(rig, dom, *reference, binding.rigid_tolerance)
+    let reference = if let Some(name) = &binding.bone {
+        let container = dom.get_by_ref(*reference).ok_or("missing rig container")?;
+        let matches: Vec<_> = container
+            .children()
+            .iter()
+            .filter(|reference| {
+                dom.get_by_ref(**reference)
+                    .is_some_and(|node| node.class.as_str() == "Bone" && node.name == *name)
+            })
+            .copied()
+            .collect();
+        if matches.len() != 1 {
+            return Err("animation binding named root Bone missing or ambiguous".into());
+        }
+        matches[0]
+    } else {
+        *reference
+    };
+    validate_rig(rig, dom, reference, binding.rigid_tolerance)
 }
 
 fn validate_rig(rig: &Rig, dom: &WeakDom, root: Ref, tolerance: f32) -> Result<()> {

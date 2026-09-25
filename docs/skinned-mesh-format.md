@@ -1,5 +1,23 @@
 # Native skinned mesh encoding — issue 3
 
+Skin conversion also emits `rig.rbxm`: native Bone roots/children with source
+names and local bind CFrames. The manifest records `rigFile` and `rigSha256`;
+bundles include the artifact and its hash. Both glTF and FBX producers share this
+writer. Parent indices must precede children and names must be nonempty/unique.
+This is bind-pose output, not an animation rest-pose guess.
+
+Scene MeshParts can attach this artifact with `rig` referencing the same logical
+skin asset as their explicit `MeshContent` binding. Existing explicit Bone roots,
+other parent classes, cross-asset rigs and using the rig file as geometry fail.
+Imported trees admit only uniquely named Bone nodes and bind CFrame properties.
+The scene instance count includes imported Bones (and imported materials), not
+only input nodes with explicit ids.
+
+Tests compare independent glTF/FBX bind hierarchies and transforms with decoded
+native Bones and the assembled scene. Native cardinal-axis rotation compression
+can remove tiny source roundoff; comparison uses the explicit import tolerance.
+The tool still does not infer MeshPart placement/scale or prove engine deformation.
+
 The Rust `skin::encode` implementation emits FileMesh v4.01 from canonical
 geometry, four-influence vertex envelopes and a topologically ordered skeleton.
 `roblox convert skin model.glb --config skin.json --output NEW_DIRECTORY`

@@ -45,6 +45,8 @@ See [terrain inventory](terrain-format.md) and its separate generation issue.
 Scenes linking an `animationGltf` or `animationFbx` asset must declare an
 `animationBindings` entry with `animation` (the usual asset/file reference),
 `root` (scene id of the root Bone), and positive `rigidTolerance` below one.
+For imported native rigs, `root` can identify the containing MeshPart and `bone`
+selects its uniquely named direct root Bone. No generated scene ids are invented.
 The builder receives the exact rig metadata from the conversion result; it does
 not infer an association from filenames, reread a stale external manifest, or
 trust a caller-provided matching hash alone.
@@ -57,7 +59,7 @@ bindings fail before scene serialization. Bone ancestry outside the selected
 root cannot quietly add another transform. Non-Bone intermediary hierarchies
 are rejected. The tolerance is explicit numerical admission, not a hidden limit.
 
-This is rest-space validation, not retargeting, rig creation or animation
+This is rest-space validation, not retargeting or animation
 execution. A skin's inverse-bind rest may differ from the source animation's
 rest; that mismatch must be resolved deliberately. Canonical authored animation
 JSON has no imported source rig metadata and cannot satisfy this source-rig
@@ -75,7 +77,11 @@ partial outputs. These checks do not establish current engine animation playback
 Bundle assembly supports explicit mesh/collision/texture bindings and native
 material attachment; see [offline bundles](offline-bundles.md). It does not yet
 automatically turn a geometry conversion manifest into properly sized/pivoted
-MeshParts or automatically assemble rigs. Terrain payload generation is now
+MeshParts. Native Bone creation/attachment is implemented through the `rig` asset
+reference, but rebasing source-rest animation onto a different skin bind pose is
+not implemented. The independent Khronos fixture demonstrates that these rests
+can differ: the integrated build rejects it rather than silently distorting its
+motion. Terrain payload generation is now
 tracked separately in issue 10; preservation of supplied native terrain data is
 tested. Plain instance serialization does not prove the remaining integration
 work complete. No remote asset ids are generated here

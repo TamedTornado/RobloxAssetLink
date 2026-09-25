@@ -221,17 +221,7 @@ pub(crate) fn convert(source: &Path, output: &Path, config: &Config) -> Result<M
         });
         files.push((entry.file, bytes));
     }
-    skin_import::write(
-        output,
-        Manifest {
-            format: "roblox-skinned-mesh-v4.01",
-            metres_per_stud: config.metres_per_stud,
-            rig,
-            meshes: entries,
-            engine_verified: false,
-        },
-        files,
-    )
+    skin_import::write(output, config.metres_per_stud, rig, entries, files)
 }
 
 #[cfg(test)]

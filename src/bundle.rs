@@ -200,7 +200,9 @@ fn build_asset(
         }
         Conversion::Skin { source, config } => {
             let manifest = crate::skin_import::convert(&local(root, source)?, output, config)?;
-            Ok(manifest.meshes.into_iter().map(|mesh| mesh.file).collect())
+            let mut files: Vec<_> = manifest.meshes.into_iter().map(|mesh| mesh.file).collect();
+            files.push("rig.rbxm".into());
+            Ok(files)
         }
         Conversion::AnimationGltf { source, config } => {
             fs::create_dir(output)?;
