@@ -81,5 +81,40 @@ and repeatable rig/artifact hashes.
 Semantics follow the [glTF animation specification](https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html#animations)
 and [Bone transform documentation](https://create.roblox.com/docs/reference/engine/classes/Bone).
 
-Remaining: FBX clips, broader interpolation profiles, integration with imported
-skin/Bone instances and native playback acceptance. Issue 4 remains open.
+## FBX source clips
+
+`roblox convert animation-fbx motion.fbx --config animation.json --output motion.rbxm`
+uses the linked-in ufbx animation baker. Bundles accept `animationFbx` with the
+same configuration. [Example](../examples/animation-fbx.json).
+
+The caller selects `animationIndex` and `rootNode` (ufbx typed node id), units,
+rigidity tolerance, clip name/loop/priority, and all sampling/budget settings:
+`resampleRate`, `minimumSampleRate`, `maxKeyframeSegments`, `maxOutputFrames`.
+The minimum rate is the threshold above which ufbx considers source keys already
+sampled. Rotation resampling remains enabled; key reduction is disabled. The
+output is explicitly marked `sampledApproximation: true`, not an exact copy of
+arbitrary FBX cubic/Euler curves. There is no claimed continuous error bound.
+
+Units are converted with ModifyGeometry, matching skin import. The importer
+bakes the transform chain into local translation/quaternion samples, emits
+`inverse(rest) * animated` poses and retains the joint-rest metadata/hash. Source
+time is kept intact during baking and rebased exactly once at output; the
+manifest retains `sourceTimeBegin`. This prevents the first-frame loss caused by
+mixing ufbx's trimmed key times with its untrimmed playback bounds.
+
+Actual scale animation, stepped motion, animated layer weights, non-rigid
+transforms, non-transform motion and motion outside the selected rig fail.
+Redundant metadata channels such as constant Visibility are allowed only when
+their values/tangents prove constant and composed evaluation equals the original
+property. They are listed in `unchangedProperties`, not silently ignored. Equal
+cubic endpoint values alone are not sufficient evidence of constant motion.
+
+The unchanged ufbx Maya wiggle fixture is decoded back from native RBXM and every
+pose is reconstructed and compared with direct source evaluation. Tests cover
+first/last times, repeated bytes and rig hashes, higher sampling rates, explicit
+output budgets, no-overwrite behavior, CLI/bundle parity and the metadata proof.
+Builds use neither a codec subprocess, Studio nor a remote conversion service.
+
+Remaining: complete target-rig binding, including the selected root's external
+parent transform, scene Bone/animation wiring and native playback acceptance.
+Issue 4 remains open; local pose tests alone do not establish whole-rig placement.

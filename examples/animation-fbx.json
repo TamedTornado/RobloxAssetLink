@@ -1,0 +1,13 @@
+{
+  "animationIndex": 0,
+  "rootNode": 1,
+  "metresPerStud": 0.28,
+  "rigidTolerance": 0.0001,
+  "resampleRate": 60,
+  "minimumSampleRate": 60,
+  "maxKeyframeSegments": 10000,
+  "maxOutputFrames": 20000,
+  "name": "Motion",
+  "looped": true,
+  "priority": "Action"
+}

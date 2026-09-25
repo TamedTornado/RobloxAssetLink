@@ -46,7 +46,8 @@ claim native engine acceptance.
 `roblox convert animation` converts canonical rest-relative clip JSON to native
 KeyframeSequence models, also available in offline bundles. `animation-gltf`
 imports rigid LINEAR glTF/GLB skeletal clips with explicit rig selection and metric
-conversion. FBX clips remain unimplemented. See [animation conversion](docs/animation-format.md).
+conversion. `animation-fbx` bakes FBX motion with explicit sampling settings and
+reports its approximation boundary. See [animation conversion](docs/animation-format.md).
 
 ## Executables and current scope
 

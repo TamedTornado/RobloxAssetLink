@@ -25,6 +25,10 @@ pub struct Asset {
 #[derive(Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 pub enum Conversion {
+    AnimationFbx {
+        source: PathBuf,
+        config: crate::animation_fbx::Config,
+    },
     Skin {
         source: PathBuf,
         config: crate::skin_import::Config,
@@ -105,6 +109,19 @@ fn key(id: &str) -> String {
 
 fn build_asset(root: &Path, output: &Path, asset: &Asset) -> Result<Vec<String>> {
     match &asset.conversion {
+        Conversion::AnimationFbx { source, config } => {
+            fs::create_dir(output)?;
+            let manifest = crate::animation_fbx::convert(
+                &local(root, source)?,
+                &output.join("animation.rbxm"),
+                config.clone(),
+            )?;
+            fs::write(
+                output.join("manifest.json"),
+                serde_json::to_vec_pretty(&manifest)?,
+            )?;
+            Ok(vec!["animation.rbxm".into()])
+        }
         Conversion::Skin { source, config } => {
             let manifest = crate::skin_import::convert(&local(root, source)?, output, config)?;
             Ok(manifest.meshes.into_iter().map(|mesh| mesh.file).collect())
