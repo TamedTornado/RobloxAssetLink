@@ -11,6 +11,108 @@ fn config() -> Config {
     }
 }
 
+fn decoded_planes(path: &Path) -> Vec<[Vec<u8>; 3]> {
+    use ffmpeg_next as av;
+    av::init().unwrap();
+    let mut input = av::format::input(path).unwrap();
+    let parameters = input.stream(0).unwrap().parameters();
+    let mut decoder = av::codec::context::Context::from_parameters(parameters)
+        .unwrap()
+        .decoder()
+        .video()
+        .unwrap();
+    let mut result = Vec::new();
+    let mut drain = |decoder: &mut av::decoder::Video| {
+        loop {
+            let mut frame = av::frame::Video::empty();
+            match decoder.receive_frame(&mut frame) {
+                Ok(()) => {
+                    assert!(!frame.is_corrupt());
+                    assert_eq!(frame.format(), av::format::Pixel::YUV420P);
+                    let planes = std::array::from_fn(|plane| {
+                        let width = if plane == 0 {
+                            frame.width()
+                        } else {
+                            frame.width() / 2
+                        } as usize;
+                        let height = if plane == 0 {
+                            frame.height()
+                        } else {
+                            frame.height() / 2
+                        } as usize;
+                        let mut pixels = Vec::new();
+                        for row in 0..height {
+                            let offset = row * frame.stride(plane);
+                            pixels.extend_from_slice(&frame.data(plane)[offset..offset + width]);
+                        }
+                        pixels
+                    });
+                    result.push(planes);
+                }
+                Err(av::Error::Eof) => break,
+                Err(av::Error::Other { errno }) if errno == av::error::EAGAIN => break,
+                Err(error) => panic!("frame decode failed: {error}"),
+            }
+        }
+    };
+    loop {
+        let mut packet = av::Packet::empty();
+        match packet.read(&mut input) {
+            Ok(()) => {
+                assert!(!packet.is_corrupt());
+                decoder.send_packet(&packet).unwrap();
+                drain(&mut decoder);
+            }
+            Err(av::Error::Eof) => break,
+            Err(error) => panic!("packet decode failed: {error}"),
+        }
+    }
+    decoder.send_eof().unwrap();
+    drain(&mut decoder);
+    result
+}
+
+#[test]
+fn vp9_preserves_each_source_color_plane_with_bounded_fixture_distortion() {
+    let temp = tempfile::tempdir().unwrap();
+    let source = Path::new("tests/fixtures/video-64x48.mp4");
+    let output = temp.path().join("video.webm");
+    convert(source, &output, &config()).unwrap();
+    let original = decoded_planes(source);
+    let converted = decoded_planes(&output);
+    assert_eq!(original.len(), converted.len());
+    for (index, (original, converted)) in original.iter().zip(&converted).enumerate() {
+        for plane in 0..3 {
+            assert_eq!(original[plane].len(), converted[plane].len());
+            let mse = original[plane]
+                .iter()
+                .zip(&converted[plane])
+                .map(|(a, b)| (f64::from(*a) - f64::from(*b)).powi(2))
+                .sum::<f64>()
+                / original[plane].len() as f64;
+            // Test-specific fidelity threshold, not a hidden production quality policy.
+            assert!(mse < 25.0, "frame {index} plane {plane} MSE={mse}");
+        }
+    }
+}
+
+#[test]
+fn fractional_frame_rate_roundtrips_through_webm_timestamp_quantization() {
+    let temp = tempfile::tempdir().unwrap();
+    let first = temp.path().join("first.webm");
+    let second = temp.path().join("second.webm");
+    let policy = Config {
+        max_frames: 6,
+        ..config()
+    };
+    let result = convert(Path::new("tests/fixtures/video-ntsc.mp4"), &first, &policy).unwrap();
+    assert_eq!(result.frame_rate, [30000, 1001]);
+    assert_eq!(result.frames, 6);
+    let roundtrip = convert(&first, &second, &policy).unwrap();
+    assert_eq!(roundtrip.frame_rate, result.frame_rate);
+    assert_eq!(roundtrip.frames, result.frames);
+}
+
 #[test]
 fn h264_to_webm_is_local_deterministic_and_preserves_frame_timing() {
     let temp = tempfile::tempdir().unwrap();

@@ -63,8 +63,31 @@ struct Timeline {
     input: av::Rational,
     output: av::Rational,
     origin: Option<i64>,
+    previous: Option<i64>,
     count: u64,
     limit: u64,
+}
+
+impl Timeline {
+    fn validate_timestamp(&mut self, pts: i64) -> Result<()> {
+        if self.previous.is_some_and(|previous| pts <= previous) {
+            return Err("video frame timestamps must be strictly increasing".into());
+        }
+        let origin = *self.origin.get_or_insert(pts);
+        let actual = (i128::from(pts) - i128::from(origin))
+            * i128::from(self.input.numerator())
+            * i128::from(self.output.denominator());
+        let expected = i128::from(self.count)
+            * i128::from(self.output.numerator())
+            * i128::from(self.input.denominator());
+        // Permit nearest-tick timestamp rounding, not a configurable timing drift.
+        let tick = i128::from(self.input.numerator()) * i128::from(self.output.denominator());
+        if (actual - expected).abs() * 2 > tick {
+            return Err(format!("variable or discontinuous video frame timing at frame {}: PTS {pts}, origin {origin}, input time base {:?}, frame interval {:?}", self.count, self.input, self.output).into());
+        }
+        self.previous = Some(pts);
+        Ok(())
+    }
 }
 
 fn frames(
@@ -93,16 +116,7 @@ fn frames(
                     return Err("video exceeds maxFrames".into());
                 }
                 let pts = frame.timestamp().ok_or("video frame has no timestamp")?;
-                let origin = *timeline.origin.get_or_insert(pts);
-                let actual = (i128::from(pts) - i128::from(origin))
-                    * i128::from(timeline.input.numerator())
-                    * i128::from(timeline.output.denominator());
-                let expected = i128::from(timeline.count)
-                    * i128::from(timeline.output.numerator())
-                    * i128::from(timeline.input.denominator());
-                if actual != expected {
-                    return Err("variable or discontinuous video frame timing is not supported by this profile".into());
-                }
+                timeline.validate_timestamp(pts)?;
                 frame.set_pts(Some(i64::try_from(timeline.count)?));
                 frame.set_kind(av::picture::Type::None);
                 encoder.send_frame(&frame)?;
@@ -204,7 +218,13 @@ pub fn convert(source: &Path, output: &Path, config: &Config) -> Result<Manifest
     let mut options = av::Dictionary::new();
     options.set("crf", &config.crf.to_string());
     let mut encoder = encoder.open_with(options)?;
-    target.add_stream(codec)?.set_parameters(&encoder);
+    {
+        let mut stream = target.add_stream(codec)?;
+        stream.set_parameters(&encoder);
+        stream.set_time_base(rate.invert());
+        stream.set_rate(rate);
+        stream.set_avg_frame_rate(rate);
+    }
     let mut header = av::Dictionary::new();
     header.set("fflags", "+bitexact");
     let remaining = target.write_header_with(header)?;
@@ -216,6 +236,7 @@ pub fn convert(source: &Path, output: &Path, config: &Config) -> Result<Manifest
         input: time_base,
         output: rate.invert(),
         origin: None,
+        previous: None,
         count: 0,
         limit: config.max_frames,
     };
@@ -267,4 +288,35 @@ pub fn convert(source: &Path, output: &Path, config: &Config) -> Result<Manifest
     };
     temporary.persist_noclobber(output)?;
     Ok(manifest)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn timeline() -> Timeline {
+        Timeline {
+            input: av::Rational(1, 1000),
+            output: av::Rational(1001, 30000),
+            origin: None,
+            previous: None,
+            count: 0,
+            limit: 6,
+        }
+    }
+
+    #[test]
+    fn timestamp_quantization_does_not_admit_duplicates_drops_or_variable_timing() {
+        let mut valid = timeline();
+        for (index, timestamp) in [0, 33, 67, 100, 133, 167].into_iter().enumerate() {
+            valid.count = index as u64;
+            valid.validate_timestamp(timestamp).unwrap();
+        }
+        for timestamp in [0, 32, 35, 67, -1] {
+            let mut invalid = timeline();
+            invalid.validate_timestamp(0).unwrap();
+            invalid.count = 1;
+            assert!(invalid.validate_timestamp(timestamp).is_err());
+        }
+    }
 }

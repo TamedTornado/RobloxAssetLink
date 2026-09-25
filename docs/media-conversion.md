@@ -107,6 +107,24 @@ Tests decode the VP9 output of an independently encoded synthetic H.264 fixture,
 check dimensions/timestamps, deterministic bytes, no-overwrite, limits and
 truncation, then run CLI without PATH and bundle/native scene binding. This is a
 working **silent-video profile**, not completion of general video conversion.
-Audio/video muxing, broader color/timing profiles, visual distortion bounds and
+Audio/video muxing, broader color/timing profiles and
 actual Roblox playback/deployment acceptance remain open. `engineVerified` stays
 false: codec/container correctness is not engine acceptance.
+
+### Pixel fidelity and fractional-rate regression
+
+The synthetic H.264 fixture is decoded alongside its VP9 output and compared
+frame-by-frame across Y, U and V planes, stripping decoder stride padding. Each
+plane must have MSE below 25 in 8-bit sample units at the fixture's configured
+quality. This is a test-specific distortion bound, not a guarantee for arbitrary
+content or a hidden production quality threshold. Decoder/demux errors are not
+treated as successful end-of-stream by this comparison helper.
+
+A separately encoded 30000/1001 fps fixture exposed two timing defects: the
+WebM stream did not retain the nominal frame-rate metadata, and CFR validation
+rejected ordinary millisecond timestamp quantization. The writer now explicitly
+sets stream time base/rates; validation allows nearest-tick rounding while
+requiring strictly increasing timestamps. MP4→WebM→WebM retains six frames and
+the original rational rate. Unit tests reject duplicate, dropped, reversed and
+irregular timestamps. Timing failures report the frame, PTS, origin and rational
+time bases rather than a context-free error.
