@@ -129,7 +129,7 @@ pub struct SceneArtifact {
     pub format: String,
 }
 
-fn local(root: &Path, source: &Path) -> Result<PathBuf> {
+pub(crate) fn local(root: &Path, source: &Path) -> Result<PathBuf> {
     if source.is_absolute() {
         return Err("bundle source paths must be relative".into());
     }
@@ -153,7 +153,7 @@ fn bind_target(asset: &Asset) -> Option<&str> {
     }
 }
 
-fn ordered_assets(plan: &Plan) -> Result<Vec<&Asset>> {
+pub(crate) fn ordered_assets(plan: &Plan) -> Result<Vec<&Asset>> {
     let indices: HashMap<_, _> = plan
         .assets
         .iter()
