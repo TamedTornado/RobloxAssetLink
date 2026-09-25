@@ -33,6 +33,7 @@ mod source_mesh;
 pub mod terrain;
 pub mod terrain_grid;
 pub mod terrain_heightmap;
+pub mod terrain_physics;
 pub mod terrain_voxels;
 pub mod texture;
 mod vertex_attributes;

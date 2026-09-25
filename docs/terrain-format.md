@@ -171,6 +171,55 @@ independent fixture exactly. They are **not** execution of the proprietary reade
 live engine acceptance or proof that PhysicsGrid can be omitted. No executable
 bytes, proprietary assets, decompiled source or leaked source are committed.
 
+## PhysicsGrid version-two wire structure
+
+`terrain_physics::{decode, encode}` now preserves the independent fixture's
+PhysicsGrid as structured coordinate groups rather than an unexplained blob.
+It requires an explicit positive `maxEntries` budget and rejects unknown versions,
+unsupported exponents, truncation, excess counts and trailing bytes. It does not
+derive physics state from a new SmoothGrid or attach unrelated fixture data.
+
+The payload starts with version byte 2 and an exponent byte (native reader bound
+0–8). It then contains exactly three groups. Each group begins with a big-endian
+u32 entry count, followed by that many twelve-byte coordinate deltas using the
+same byte-interleaved X/Y/Z representation as SmoothGrid. The previous coordinate
+resets to zero at each group boundary. Order and duplicates must be preserved;
+the fixture itself contains repeated coordinates. The codec intentionally leaves
+the groups unnamed rather than guessing solid/liquid semantics.
+
+The fixture's 2,342 bytes contain exponent 3 and group counts [194,0,0]. There are
+136 unique coordinates. A regression compares these coordinates with the fixture's
+non-Air voxel positions expanded by one cell in every direction and bucketed into
+8-cell regions: the sets match exactly. This is evidence of a spatial acceleration
+relationship, **not proof that this recipe generates correct physics state for
+arbitrary terrain**. Two groups are empty in this fixture; tests using authored
+data additionally check their delta resets and encoding, not native semantics.
+
+Installed executable trace (same hash as above):
+
+- PhysicsGrid reflection registration at `0x1402b0300` binds getter thunk
+  `0x140eda240` and setter thunk `0x140edb6f0`.
+- RTTI identifies MegaClusterInstance's subobject offset 0x1e8 and vtable
+  `0x148bd3c90`. Setter dispatch at vtable offset 0x28 reaches `0x1444d2570`.
+  This method skips empty input and sends nonempty payloads to `0x1409e1fc0`.
+- The latter checks version 2 and the exponent bound, then calls group readers
+  `0x1409ddbf0`, `0x1409dd920` and `0x1409dd650`, in that order. All three read a
+  count and interleaved coordinate deltas; they install different internal marker
+  states. No triangle positions, triangle indices or mesh cooking occur in this
+  wire decode path.
+- Getter thunk reaches `0x1444d7870`, then serializer `0x1409e5520` on a separate
+  physics structure. That serializer writes header bytes 2 and 3 at
+  `0x1409e568f`/`0x1409e56d1`, then calls the same coordinate-list writer three
+  times. Alternative accepted header exponents are preserved by the raw codec,
+  not interpreted as an established alternative physics resolution. The
+  SmoothGrid setter follows a different voxel-grid path.
+
+Both regenerated payloads now pass native place serialization/deserialization
+with exact fixture bytes. This does not establish that an omitted PhysicsGrid is
+automatically rebuilt, that all three groups can be synthesized from occupancy
+alone, or that engine collision queries work. Generated-terrain manifests continue
+to report `physicsGenerated: false`; the terrain issue remains open.
+
 [Issue 10](https://github.com/TamedTornado/RobloxAssetLink/issues/10) tracks the
 remaining PhysicsGrid relationship, native-format coverage and acceptance work.
 Rust voxel/heightmap encoding and CLI/bundle integration are implemented for the

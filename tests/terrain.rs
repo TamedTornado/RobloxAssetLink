@@ -42,6 +42,18 @@ fn independent_native_terrain_voxels_palette_and_water_survive_place_assembly() 
         "SmoothGrid".into(),
         rbx_dom_weak::types::Variant::BinaryString(rebuilt.into()),
     );
+    let rbx_dom_weak::types::Variant::BinaryString(physics) = &properties["PhysicsGrid"] else {
+        panic!("expected binary physics grid");
+    };
+    let physics_bytes: &[u8] = physics.as_ref();
+    let limits = roblox_asset_link::terrain_physics::Limits { max_entries: 194 };
+    let decoded = roblox_asset_link::terrain_physics::decode(physics_bytes, &limits).unwrap();
+    let rebuilt = roblox_asset_link::terrain_physics::encode(&decoded, &limits).unwrap();
+    assert_eq!(rebuilt.as_slice(), physics_bytes);
+    properties.insert(
+        "PhysicsGrid".into(),
+        rbx_dom_weak::types::Variant::BinaryString(rebuilt.into()),
+    );
     let spec = json!({"kind":"place","roots":[{"id":"world","class":"Workspace","name":"Workspace","properties":{},"references":{},"children":[
         {"id":"terrain","class":"Terrain","name":"Terrain","properties":properties,"references":{},"children":[]}
     ]}]});
