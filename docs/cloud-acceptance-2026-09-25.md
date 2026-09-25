@@ -119,6 +119,24 @@ does not depend on that API. Studio sign-in was separately repaired by exposing
 the existing Vinegar desktop entry in the standard per-user applications folder,
 which GNOME's session could see. No credential or Wine security changes were made.
 
+Follow-up native checks explain why preload was not a useful pack oracle in this
+installation: `PreloadAsyncSupportTexturePack` is false. The existing flags
+`DebugEnableTexturePackPreviewForAllUsages` and `TexturePackGeneratorUseRaw` are
+also false; `TexturePackGeneratorUseOriginal` is true. These were read, not changed.
+Studio's bundled UGC validator calls
+`UGCValidationService:DoesSurfaceAppearanceMatchTexturePackAsync`, but invoking
+that method from our authorized RunScript context fails with a missing
+RobloxScript capability. Its `GetPropertyValue` helper has the same restriction.
+No capability bypass was attempted. `RunService:Run()` itself succeeded and the
+isolated simulation was stopped, but that is not proof of TexturePack rendering.
+
+Direct unauthenticated delivery of the test pack returned 403. The documented
+Open Cloud asset-delivery endpoint also returned 403 using the existing scoped
+asset read/write key: download uses a separate `legacy-asset:manage` scope, as
+documented in Roblox's
+[asset-delivery announcement](https://devforum.roblox.com/t/creator-action-required-new-asset-delivery-api-endpoints-for-community-tools/3574403).
+Do not extract a browser/Studio session credential to get around that boundary.
+
 The first mesh probe passed a URI string to PreloadAsync; Roblox interpreted it
 as an image request and returned `AssetDelivery403IncorrectAssetType`. Passing
 the typed MeshPart fixed that test error. This was not a mesh-upload failure.

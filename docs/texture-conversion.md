@@ -310,4 +310,46 @@ implementation alongside the uncompressed RGBA profile; compressed color/normal
 profiles remain unfinished. Do not silently replace PNGs with a
 guessed platform cache. Keep TexturePack material descriptors separate from pixel
 encoding. Further evidence is needed for the marked normal encoding and the
-renderer/TexturePack relationship. Issue 5 remains open.
+renderer/TexturePack relationship. This was the pre-acceptance audit; subsequent
+implementation closed issue 5. Deployment acceptance is tracked separately in
+issue 9 and in [the live acceptance report](cloud-acceptance-2026-09-25.md).
+
+## DDS reader constraints: executable and live boundary checks
+
+Follow-up inspection used the same executable hash above. DDS reader function
+`0x1448f97d0` checks the magic, rejects zero width/height, and dispatches formats
+before calculating required surface bytes. In addition to legacy DXT1/3/5 and
+ATI1/2, its DX10 dispatch accepts DXGI codes 10, 28, 34, 49, 61, 71, 74, 77,
+80 and 83. Those are RGBA16-float, RGBA8-unorm, RG16-float, RG8-unorm, R8-unorm,
+and BC1/2/3/4/5-unorm respectively. This is a reader inventory, not an assertion
+that every format has been tested through every material or cloud route.
+
+The defensive bounds below are conditional on a native flag, not unconditional
+Roblox format rules:
+
+| Check | Instruction evidence |
+| --- | --- |
+| Width and height at most 4096 | `0x1448f9a42–0x1448f9a55` |
+| Header/loaded mip count at most 13 | `0x1448f9a5b–0x1448f9a5e`, `0x1448f9d5c–0x1448f9d68` |
+| Array count at most 256 | `0x1448f9cfc–0x1448f9d03` |
+| 3D depth at most 4096 | `0x1448f9d21–0x1448f9d26` |
+| Per-level byte count at most 0xffffffff | `0x1448f9f3d–0x1448f9f45` |
+| Required surface bytes fit remaining input | `0x1448f9f60–0x1448f9f64` |
+
+The controlling byte at `0x14d8e2850` is registered as `FixCLI226198` by
+`0x1448fd740`. A read-only `settings():GetFFlag("FixCLI226198")` in the installed
+Studio returned **false**. No flag or security setting was changed. Small L8
+fixtures loaded at width 4096, width 4097 and height 4097; declared mip counts
+13 and 14 also loaded. Zero-width and truncated-input fixtures failed. A
+17-pixel non-power-of-two image loaded. These were local ImageLabel decode
+probes, not malformed cloud uploads or claims about GPU allocation maxima.
+
+The power-of-two check at `0x1448f9d6e–0x1448f9da2` is conditional on caller
+option bit 0x2, not a universal DDS constraint. Keep protocol structure separate
+from configurable application resource limits and target/caller constraints.
+
+Together with the successful BC4/L8/RGBA8 native image-load probes, this rules
+out treating the cloud's blanket DDS rejection as demonstrated corruption in
+those output files. The cloud Image route rejected even valid uncompressed
+variants as `Unsupported image format.` Tightening local encoders to arbitrary
+dimensions would not repair that admission boundary.
