@@ -66,6 +66,12 @@ enum Build {
 
 #[derive(Subcommand)]
 enum Convert {
+    /// Build a native SurfaceAppearance and local texture maps from material JSON.
+    Material {
+        source: PathBuf,
+        #[arg(long)]
+        output: PathBuf,
+    },
     /// Bake FBX motion locally using explicit sampling configuration.
     AnimationFbx {
         source: PathBuf,
@@ -270,6 +276,13 @@ fn execute(cli: Cli) -> Result<Value> {
         return Ok(json!({"ok":true,"scope":"offlineConversion","result":manifest}));
     }
     if let Command::Convert {
+        command: Convert::Material { source, output },
+    } = &cli.command
+    {
+        let manifest = roblox_asset_link::material::convert(source, output)?;
+        return Ok(json!({"ok":true,"scope":"offlineConversion","result":manifest}));
+    }
+    if let Command::Convert {
         command:
             Convert::Mesh {
                 source,
@@ -306,7 +319,7 @@ fn execute(cli: Cli) -> Result<Value> {
             "localLuauCompilation":true,
             "offlineSceneSerialization":true,
             "offlineAssetBundleBuild":true,
-            "offlineConversion":["static-gltf-to-mesh-v2","static-fbx-to-mesh-v2","static-obj-to-mesh-v2","textures-to-png","collision-to-csgphs-v5","audio-to-ogg-vorbis","canonical-animation-to-rbxm","rigid-linear-gltf-animation-to-rbxm","sampled-fbx-animation-to-rbxm","rigid-bind-gltf-to-skinned-mesh-v4","linear-fbx-to-skinned-mesh-v4"],"offlineGameBuild":false,
+            "offlineConversion":["static-gltf-to-mesh-v2","static-fbx-to-mesh-v2","static-obj-to-mesh-v2","textures-to-png","material-to-surface-appearance","collision-to-csgphs-v5","audio-to-ogg-vorbis","canonical-animation-to-rbxm","rigid-linear-gltf-animation-to-rbxm","sampled-fbx-animation-to-rbxm","rigid-bind-gltf-to-skinned-mesh-v4","linear-fbx-to-skinned-mesh-v4"],"offlineGameBuild":false,
             "serverExecutable":"roblox-server","requiresStudioForCatalog":false,
             "persistentStudioImport":false,"studioCommandExecution":false
         }}));

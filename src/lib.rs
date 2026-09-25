@@ -12,6 +12,7 @@ pub mod collision;
 mod collision_format;
 pub mod config;
 pub mod convert;
+pub mod material;
 pub mod mesh;
 mod rigid;
 pub mod scene;

@@ -94,6 +94,31 @@ fn explicit_decode_limits_and_bit_depth_rejection_are_enforced() {
 }
 
 #[test]
+fn standalone_scalar_maps_preserve_linear_samples_without_luminance_conversion() {
+    let temp = tempfile::tempdir().unwrap();
+    let source = temp.path().join("scalar.png");
+    image::GrayImage::from_raw(2, 1, vec![37, 191])
+        .unwrap()
+        .save(&source)
+        .unwrap();
+    for (operation, semantic) in [
+        (Operation::Roughness, "roughness"),
+        (Operation::Metalness, "metalness"),
+    ] {
+        let output = temp.path().join(semantic);
+        let manifest = convert(&source, &output, &config(operation)).unwrap();
+        assert_eq!(manifest.textures[0].color_space, "linear");
+        assert_eq!(
+            image::open(output.join(format!("{semantic}.png")))
+                .unwrap()
+                .to_luma8()
+                .into_raw(),
+            [37, 191]
+        );
+    }
+}
+
+#[test]
 fn texture_cli_returns_structured_results_without_credentials() {
     let temporary = tempfile::tempdir().unwrap();
     let source = temporary.path().join("source.png");

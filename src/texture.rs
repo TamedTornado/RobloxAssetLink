@@ -21,6 +21,8 @@ pub enum Operation {
     NormalOpenGl,
     NormalDirectX,
     GltfMetallicRoughness,
+    Roughness,
+    Metalness,
 }
 
 #[derive(Serialize)]
@@ -73,6 +75,24 @@ pub fn convert(source: &Path, output: &Path, config: &Config) -> Result<Manifest
     }
     let (width, height) = (decoded.width(), decoded.height());
     let images = match config.operation {
+        Operation::Roughness | Operation::Metalness => {
+            let pixels = decoded.to_rgba8();
+            if pixels
+                .pixels()
+                .any(|p| p[0] != p[1] || p[1] != p[2] || p[3] != 255)
+            {
+                return Err(
+                    "standalone scalar maps require equal RGB channels and opaque alpha".into(),
+                );
+            }
+            let semantic = if matches!(config.operation, Operation::Roughness) {
+                "roughness"
+            } else {
+                "metalness"
+            };
+            let gray = GrayImage::from_fn(width, height, |x, y| Luma([pixels.get_pixel(x, y)[0]]));
+            vec![(semantic, "linear", DynamicImage::ImageLuma8(gray))]
+        }
         Operation::Color => vec![(
             "color",
             "sRGB",

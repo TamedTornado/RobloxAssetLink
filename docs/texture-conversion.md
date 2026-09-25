@@ -18,6 +18,9 @@ Operations:
 - `normalDirectX`: invert the green channel to OpenGL convention.
 - `gltfMetallicRoughness`: split green into roughness and blue into metalness,
   emitting separate 8-bit grayscale maps. Samples stay linear; no gamma operation.
+- `roughness` / `metalness`: standalone linear scalar maps. Require equal RGB
+  components and opaque alpha, preserving the scalar exactly rather than applying
+  an implicit luminance conversion.
 
 Format/semantic evidence: [Roblox texture specifications](https://create.roblox.com/docs/art/modeling/texture-specifications)
 and [SurfaceAppearance](https://create.roblox.com/docs/art/modeling/surface-appearance).
@@ -27,8 +30,37 @@ their presence is not proof of cloud upload behavior or of every client target.
 
 Still open: mesh/material dependency integration, additional material semantics,
 color-managed/HDR handling, mipmap/platform-cache requirements and native scene
-acceptance. The command does not yet build SurfaceAppearance instances or a
-TexturePack. Passing pixel tests does not close the full image/material issue.
+acceptance. TexturePack encoding is not implemented. Passing pixel tests does
+not close the full image/material issue.
+
+## Native material assembly
+
+`roblox convert material material.json --output NEW_DIRECTORY` builds a native
+`material.rbxm` SurfaceAppearance, normalized maps and a dependency/hash manifest.
+It uses the documented [SurfaceAppearance properties](https://create.roblox.com/docs/reference/engine/classes/SurfaceAppearance)
+and the pinned reflection database for serialization and AlphaMode values.
+
+The specification requires `name`, `alphaMode` (for example `Transparency`),
+`color` (three native Color components in [0,1]), `localUriPrefix` and `maps`.
+Each map has a contained relative `source` and the texture `config` described
+above. A packed metallic/roughness input supplies both maps; conflicting inputs
+for one semantic fail. Empty maps allow an explicitly untextured appearance.
+Unknown fields fail. Color is a native tint, **not** a glTF linear base-color
+factor; this command does not silently approximate source material shaders.
+
+`localUriPrefix`, for example `rbxasset://kit/paint/`, declares the mount location
+of the output directory. It is not a filesystem path or an automatic Roblox
+content installation. Map references are serialized with this prefix; moving
+outputs requires relinking. Only safe local URI segments are accepted. The
+command never uploads, installs content into Studio or manufactures remote IDs.
+Bundle integration and automatic source-material extraction remain outstanding.
+
+Tests independently decode the native instance properties, check exact channel
+values, compare repeated CLI outputs byte-for-byte, and cover conflicting maps,
+invalid enums, paths, non-grayscale scalar inputs, configured decode limits,
+rollback and no-overwrite behavior. `engineVerified` remains false: native
+serialization correctness is not proof that the renderer accepts raw map
+references without additional TexturePack/cache processing.
 
 ## Installed executable: TexturePack is not itself a pixel codec
 
