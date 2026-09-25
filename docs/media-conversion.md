@@ -34,10 +34,10 @@ separate Vorbis decoder to verify 4410 mono frames at 22050 Hz and waveform MSE
 against its analytic sine wave. Repeated outputs are byte-identical; truncation
 and a 4409-frame policy reject without output. FFmpeg is not a test dependency.
 
-Still open: broader source regressions, explicit resampling or
-downmix policy if needed, video codec/container requirements and conversion,
-native asset binding and deployment acceptance. `engineVerified` remains false.
-Issue 6 is not complete merely because the audio sub-pipeline works.
+The video, combined-source and native scene-binding paths are documented below.
+Resampling and downmixing are explicitly unsupported, not implicit processing.
+Deployment acceptance is separate from offline conversion; `engineVerified`
+remains false. See the acceptance audit at the end of this document.
 
 ## Video investigation: concrete local candidates, not upload assumptions
 
@@ -62,14 +62,13 @@ No Studio process, service or local content tree was modified.
   16 seconds. This proves a local UI asset exists, not that the game player
   accepts that profile; Studio UI and engine consumers must not be conflated.
 
-The next video implementation decision must distinguish the Roblox sampler's
-actual format/codec dispatch from Studio UI playback and from generic WebRTC.
-WebM/VPX is a concrete candidate now, but a reader/dispatch trace and known-good
-consumer sample are still needed before claiming a native target profile.
-Further tracing identified `0x1434d8a00–0x1434d8b0a`, called from WebM input-open.
+Further tracing identified `0x1434d8a00–0x1434d8b0a`, called from RVideo WebM input-open.
 It compares exact codec identifiers and returns distinct values for V_VP8,
 V_VP9, V_AV1, A_OPUS and A_VORBIS, with zero for unknown IDs. This establishes
-reader dispatch, not every platform's decoder or VideoFrame acceptance.
+native reader dispatch, not every platform's decoder or VideoFrame acceptance.
+No direct sampler-to-RVideo call chain or live playback of our output has been
+proved. The output profile targets that identified native reader; it is not an
+inference from the unrelated Studio UI MP4 or generic WebRTC codec strings.
 
 ## In-process video profile
 
@@ -106,9 +105,9 @@ repository's source license does not override those terms.
 Tests decode the VP9 output of an independently encoded synthetic H.264 fixture,
 check dimensions/timestamps, deterministic bytes, no-overwrite, limits and
 truncation, then run CLI without PATH and bundle/native scene binding. This is a
-working **silent-video profile**, not completion of general video conversion.
-Broader color/timing profiles and
-actual Roblox playback/deployment acceptance remain open. `engineVerified` stays
+working **silent-video profile**; combined audio/video conversion follows below.
+Other color/timing profiles are explicitly unsupported, and actual Roblox
+playback/deployment acceptance is unverified. `engineVerified` stays
 false: codec/container correctness is not engine acceptance.
 
 ### Pixel fidelity and fractional-rate regression
@@ -191,3 +190,46 @@ against the synthetic sine; the four video frames, rate and both codecs are
 retained. CLI-without-PATH, deterministic repeat, bundle equivalence, no-overwrite
 and policy failure tests pass. Intermediate files are automatically removed.
 These are offline codec/container tests, not Roblox runtime acceptance.
+
+## Upload-source formats are a different contract
+
+Checked against official documentation on September 25, 2026:
+
+- [Audio imports](https://create.roblox.com/docs/audio/assets) admit MP3, Ogg,
+  WAV and FLAC. The documentation explicitly describes transcoding during
+  Studio import. Acceptance of Ogg as an upload source therefore does not prove
+  byte-preserving publication of our Vorbis output.
+- [Video uploads](https://create.roblox.com/docs/ui/video-frames) admit MP4 and
+  MOV, not our WebM output. The native RVideo reader evidence above does not
+  override this public upload contract. Uploading the original MP4 instead would
+  move conversion back to Roblox; we do not silently do that.
+
+The local converters transcode to their chosen output profiles; the media muxer
+copies already converted packets without transcoding. Neither operation requires
+Roblox servers. Determining a supported publication route for preconverted media
+belongs to issue 9 and remains unfinished. No assets were uploaded for this audit.
+
+## Issue 6 acceptance audit
+
+Audited implementation `928b6e1`, with its passing 144-test source suite reused.
+All 16 media integration tests passed again with network access disabled:
+
+```sh
+unshare --user --map-root-user --net cargo test --offline --locked \
+  --test audio --test video --test media_mux --test media_transcode
+```
+
+| Requirement | Evidence |
+| --- | --- |
+| Distinguish native consumption from upload inputs and identify transcoding | Installed native audio files; hashed binary's RVideo WebM reader and exact codec dispatch above; official upload contracts explicitly distinguished. Local conversion versus packet-copy paths documented. |
+| Specify project-independent audio/video profiles | Mono/stereo Vorbis, progressive even-sized YUV420P CFR VP9, and combined VP9/Vorbis; explicit JSON quality/resource policy, retained rates and dimensions, no project names or project-specific limits. |
+| In-process codecs, justify external tools | Symphonia/libvorbis and linked FFmpeg/libvpx; no codec executable used by conversion. Codec implementation cost and native dependencies/licenses documented above. |
+| Metadata, duration, malformed inputs and deterministic packaging | `tests/audio.rs`, `tests/video.rs`, `tests/media_mux.rs`, `tests/media_transcode.rs`: independent source fixtures, decoded audio/pixel comparisons, fractional frame rates, priming/padding, packet identity, offsets, limits, corruption, no-overwrite, repeated bytes and CLI/bundle equivalence. |
+| No server-side build conversion | All 16 integration tests pass in an isolated network namespace; CLI tests clear the environment, including PATH and credentials. Native scene bindings are serialized locally. |
+| Explicit unsupported formats | Profiles above reject unsupported channel/sample/pixel layouts, timing, extra streams, transforms and external references rather than silently discard or reinterpret them. No promise of arbitrary FFmpeg input support. |
+
+**Verdict: the issue's offline profile implementation and validation requirements
+are satisfied.** This is not proof of live VideoFrame playback, every platform's
+codec support, or publication of preconverted bytes. Those claims remain false
+or unverified; manifests continue to report `engineVerified: false`. The overall
+conversion goal remains open, including issue 9's deployment boundary.
