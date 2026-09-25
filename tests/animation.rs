@@ -72,3 +72,103 @@ fn invalid_times_enums_and_pose_data_fail() {
     source.frames.push(clip().frames.remove(0));
     assert!(encode(&source).is_err());
 }
+
+#[test]
+fn cli_converts_canonical_animation_and_preserves_existing_outputs() {
+    let directory = tempfile::tempdir().unwrap();
+    let source = directory.path().join("clip.json");
+    let output = directory.path().join("clip.rbxm");
+    let input = serde_json::to_vec(&clip()).unwrap();
+    std::fs::write(&source, &input).unwrap();
+    let run = || {
+        std::process::Command::new(env!("CARGO_BIN_EXE_roblox"))
+            .env_clear()
+            .args(["convert", "animation"])
+            .arg(&source)
+            .arg("--output")
+            .arg(&output)
+            .output()
+            .unwrap()
+    };
+
+    let result = run();
+    assert!(result.status.success(), "{:?}", result.stderr);
+    let response: serde_json::Value = serde_json::from_slice(&result.stdout).unwrap();
+    assert_eq!(response["result"]["format"], "rbxm-keyframe-sequence");
+    assert_eq!(response["result"]["engineVerified"], false);
+    let bytes = std::fs::read(&output).unwrap();
+    assert_eq!(bytes, encode(&clip()).unwrap());
+
+    let second = run();
+    assert!(!second.status.success());
+    assert!(serde_json::from_slice::<serde_json::Value>(&second.stderr).is_ok());
+    assert_eq!(std::fs::read(&output).unwrap(), bytes);
+    assert_eq!(std::fs::read(&source).unwrap(), input);
+}
+
+#[test]
+fn invalid_animation_never_creates_an_output() {
+    let directory = tempfile::tempdir().unwrap();
+    let source = directory.path().join("clip.json");
+    let output = directory.path().join("clip.rbxm");
+    let mut invalid = clip();
+    invalid.priority = "not-an-animation-priority".into();
+    std::fs::write(&source, serde_json::to_vec(&invalid).unwrap()).unwrap();
+
+    assert!(roblox_asset_link::animation::convert(&source, &output).is_err());
+    assert!(!output.exists());
+    assert!(roblox_asset_link::animation::convert(&source, &output.with_extension("glb")).is_err());
+    assert_eq!(std::fs::read_dir(directory.path()).unwrap().count(), 1);
+}
+
+#[test]
+fn bundle_links_animation_and_rolls_back_invalid_clips() {
+    use serde_json::json;
+
+    let directory = tempfile::tempdir().unwrap();
+    let root = directory.path();
+    std::fs::write(root.join("clip.json"), serde_json::to_vec(&clip()).unwrap()).unwrap();
+    let scene = json!({"kind":"model", "roots":[{
+        "id":"animation", "class":"Animation", "name":"Wave",
+        "properties":{}, "references":{}, "children":[],
+        "assets":{"AnimationContent":{"asset":"wave","file":"animation.rbxm"}}
+    }]});
+    std::fs::write(root.join("scene.json"), serde_json::to_vec(&scene).unwrap()).unwrap();
+    let plan = json!({
+        "assets":[{"id":"wave","conversion":{"kind":"animation","source":"clip.json"}}],
+        "scenes":[{"id":"scene","source":"scene.json"}]
+    });
+    let source = root.join("build.json");
+    std::fs::write(&source, serde_json::to_vec(&plan).unwrap()).unwrap();
+
+    let output = root.join("bundle");
+    let manifest = roblox_asset_link::bundle::build(&source, &output).unwrap();
+    assert_eq!(manifest.files.len(), 1);
+    let artifact = &manifest.files[0];
+    assert_eq!(
+        std::fs::read(output.join(&artifact.path)).unwrap(),
+        encode(&clip()).unwrap()
+    );
+    let scene_bytes = std::fs::read(output.join(&manifest.scenes[0].path)).unwrap();
+    let dom = rbx_binary::from_reader(scene_bytes.as_slice()).unwrap();
+    let animation = dom.get_by_ref(dom.root().children()[0]).unwrap();
+    assert_eq!(
+        animation.properties.get(&"AnimationContent".into()),
+        Some(&Variant::Content(rbx_dom_weak::types::Content::from_uri(
+            &artifact.local_uri
+        )))
+    );
+
+    let second = root.join("second");
+    let repeated = roblox_asset_link::bundle::build(&source, &second).unwrap();
+    assert_eq!(
+        serde_json::to_vec(&manifest).unwrap(),
+        serde_json::to_vec(&repeated).unwrap()
+    );
+
+    std::fs::write(root.join("clip.json"), b"invalid").unwrap();
+    let failed = root.join("failed");
+    assert!(roblox_asset_link::bundle::build(&source, &failed).is_err());
+    assert!(!failed.exists());
+    assert!(output.exists());
+}

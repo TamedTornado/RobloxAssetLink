@@ -16,7 +16,21 @@ non-finite times are rejected. Source scripts, Studio and cloud APIs are not use
 References: [KeyframeSequence](https://create.roblox.com/docs/reference/engine/classes/KeyframeSequence)
 and [Pose](https://create.roblox.com/docs/reference/engine/classes/Pose).
 
+`roblox convert animation clip.json --output clip.rbxm` exposes the canonical
+encoder without Studio or network access. Output creation is atomic and never
+overwrites an existing file. Structured output includes source/artifact hashes,
+keyframe count and `engineVerified: false`.
+
+Offline bundle plans accept `{"kind":"animation","source":"clip.json"}`.
+The resulting `animation.rbxm` can be referenced by an Animation's `AnimationContent`
+through the scene asset map. This is a local link awaiting deployment, not a
+claim that an arbitrary local URI is playable in Roblox.
+
+CLI and bundle integration tests independently decode the resulting scene,
+check the animation reference, deterministic artifacts, source preservation,
+no-overwrite behavior and failed-build cleanup.
+
 Remaining: source clip adapters, rig binding against imported skeletons,
 interpolation/sampling conversion, supported scale/morph policy and native
-playback acceptance. No complete FBX/glTF animation converter or CLI command is
-claimed yet; this is the output serializer and issue 4 remains open.
+playback acceptance. No FBX/glTF animation converter is claimed yet; the CLI
+requires canonical rest-relative JSON. Issue 4 remains open.

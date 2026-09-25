@@ -39,6 +39,10 @@ asset-linked game build or deployment pipeline.
 scenes. See [offline bundles](docs/offline-bundles.md). This does not publish or
 claim native engine acceptance.
 
+`roblox convert animation` converts canonical rest-relative clip JSON to native
+KeyframeSequence models, also available in offline bundles. FBX/glTF clip import
+is not implemented yet. See [animation conversion](docs/animation-format.md).
+
 ## Executables and current scope
 
 - `roblox`: short-lived commands with JSON results, JSON errors on stderr, and
@@ -157,10 +161,11 @@ provides offline place/model manipulation. Prefer these supported capabilities
 where appropriate; do not invent another general transport merely because this
 repository started with a local asset adapter.
 
-The next boundary is a CLI-addressable Studio session with explicit request IDs,
-structured results, and honest failure/completion reporting. Persistent import
-must be verified with save/reopen and Play **without the bridge running** before
-an `import` command may report success. Publishing is an explicit separate action.
+The current development boundary is the offline conversion/build pipeline and
+separate deployment of its artifacts, not another Studio transport. The adapter
+is retained only until its replacement is validated. Persistent import must be
+verified with save/reopen and Play **without the bridge running** before an
+`import` command may report success. Publishing is an explicit separate action.
 
 ## Validation
 

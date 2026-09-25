@@ -66,6 +66,12 @@ enum Build {
 
 #[derive(Subcommand)]
 enum Convert {
+    /// Encode canonical rest-relative animation JSON as a native KeyframeSequence.
+    Animation {
+        source: PathBuf,
+        #[arg(long)]
+        output: PathBuf,
+    },
     /// Decode audio and encode Ogg Vorbis locally, preserving sample rate/channels.
     Audio {
         source: PathBuf,
@@ -135,6 +141,14 @@ enum Assets {
 }
 
 fn execute(cli: Cli) -> Result<Value> {
+    if let Command::Convert {
+        command: Convert::Animation { source, output },
+    } = &cli.command
+    {
+        return Ok(
+            json!({"ok":true,"scope":"offlineConversion","result":roblox_asset_link::animation::convert(source,output)?}),
+        );
+    }
     if let Command::Build {
         command: Build::Bundle { source, output },
     } = &cli.command
@@ -226,7 +240,7 @@ fn execute(cli: Cli) -> Result<Value> {
             "localLuauCompilation":true,
             "offlineSceneSerialization":true,
             "offlineAssetBundleBuild":true,
-            "offlineConversion":["static-gltf-to-mesh-v2","static-fbx-to-mesh-v2","static-obj-to-mesh-v2","textures-to-png","collision-to-csgphs-v5","audio-to-ogg-vorbis"],"offlineGameBuild":false,
+            "offlineConversion":["static-gltf-to-mesh-v2","static-fbx-to-mesh-v2","static-obj-to-mesh-v2","textures-to-png","collision-to-csgphs-v5","audio-to-ogg-vorbis","canonical-animation-to-rbxm"],"offlineGameBuild":false,
             "serverExecutable":"roblox-server","requiresStudioForCatalog":false,
             "persistentStudioImport":false,"studioCommandExecution":false
         }}));

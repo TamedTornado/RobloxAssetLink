@@ -4,10 +4,11 @@ use rbx_dom_weak::{
     InstanceBuilder, WeakDom,
     types::{CFrame, Enum, Matrix3, Vector3},
 };
-use serde::Deserialize;
-use std::collections::HashSet;
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
+use std::{collections::HashSet, fs, io::Write, path::Path};
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Clip {
     pub name: String,
@@ -16,7 +17,7 @@ pub struct Clip {
     pub frames: Vec<Frame>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Frame {
     pub name: String,
@@ -25,14 +26,14 @@ pub struct Frame {
     pub markers: Vec<Marker>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Marker {
     pub name: String,
     pub value: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Pose {
     pub name: String,
@@ -140,4 +141,43 @@ pub fn encode(clip: &Clip) -> Result<Vec<u8>> {
         .reflection_database(rbx_reflection_database::get_bundled())
         .serialize(&mut bytes, &dom, &[dom.root_ref()])?;
     Ok(bytes)
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Manifest {
+    pub format: &'static str,
+    pub source_sha256: String,
+    pub sha256: String,
+    pub keyframes: usize,
+    pub bytes: usize,
+    pub engine_verified: bool,
+}
+
+/// Convert canonical rest-relative JSON, not arbitrary source-node animation.
+pub fn convert(source: &Path, output: &Path) -> Result<Manifest> {
+    if output.extension().and_then(|s| s.to_str()) != Some("rbxm") {
+        return Err("native animation output requires the .rbxm extension".into());
+    }
+    let source = fs::read(source)?;
+    let clip: Clip = serde_json::from_slice(&source)?;
+    let bytes = encode(&clip)?;
+    let manifest = Manifest {
+        format: "rbxm-keyframe-sequence",
+        source_sha256: format!("{:x}", Sha256::digest(&source)),
+        sha256: format!("{:x}", Sha256::digest(&bytes)),
+        keyframes: clip.frames.len(),
+        bytes: bytes.len(),
+        engine_verified: false,
+    };
+
+    let parent = output
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or(Path::new("."));
+    let mut temporary = tempfile::NamedTempFile::new_in(parent)?;
+    temporary.write_all(&bytes)?;
+    temporary.as_file().sync_all()?;
+    temporary.persist_noclobber(output)?;
+    Ok(manifest)
 }

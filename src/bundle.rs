@@ -25,6 +25,9 @@ pub struct Asset {
 #[derive(Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 pub enum Conversion {
+    Animation {
+        source: PathBuf,
+    },
     Mesh {
         source: PathBuf,
         config: crate::convert::Config,
@@ -94,6 +97,16 @@ fn key(id: &str) -> String {
 
 fn build_asset(root: &Path, output: &Path, asset: &Asset) -> Result<Vec<String>> {
     match &asset.conversion {
+        Conversion::Animation { source } => {
+            fs::create_dir(output)?;
+            let manifest =
+                crate::animation::convert(&local(root, source)?, &output.join("animation.rbxm"))?;
+            fs::write(
+                output.join("manifest.json"),
+                serde_json::to_vec_pretty(&manifest)?,
+            )?;
+            Ok(vec!["animation.rbxm".into()])
+        }
         Conversion::Mesh {
             source,
             config,
