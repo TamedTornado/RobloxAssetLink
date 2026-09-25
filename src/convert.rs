@@ -88,6 +88,8 @@ fn visit(
                     gltf::Semantic::Positions
                         | gltf::Semantic::Normals
                         | gltf::Semantic::TexCoords(0)
+                        | gltf::Semantic::Tangents
+                        | gltf::Semantic::Colors(0)
                 ) {
                     return Err(format!("unsupported static mesh attribute: {semantic:?}").into());
                 }
@@ -120,6 +122,15 @@ fn visit(
             if positions.len() != normals.len() || positions.len() != uvs.len() {
                 return Err("mesh attribute counts do not match".into());
             }
+            let tangents: Option<Vec<_>> = reader.read_tangents().map(Iterator::collect);
+            let colors: Option<Vec<_>> = reader.read_colors(0).map(|c| c.into_rgba_f32().collect());
+            if tangents
+                .as_ref()
+                .is_some_and(|v| v.len() != positions.len())
+                || colors.as_ref().is_some_and(|v| v.len() != positions.len())
+            {
+                return Err("tangent/color attribute counts do not match positions".into());
+            }
             let vertex_count = u32::try_from(positions.len())?;
             let indices: Vec<_> = reader
                 .read_indices()
@@ -132,20 +143,39 @@ fn visit(
                 .into_iter()
                 .zip(normals)
                 .zip(uvs)
-                .map(|((position, normal), uv)| {
+                .enumerate()
+                .map(|(index, ((position, normal), uv))| -> Result<_> {
                     let normal: [f32; 3] = std::array::from_fn(|r| {
                         (0..3).map(|c| normal_transform[c][r] * normal[c]).sum()
                     });
                     let length = dot(normal, normal).sqrt();
-                    mesh::Vertex {
+                    let normal = normal.map(|v| v / length);
+                    let tangent = tangents
+                        .as_ref()
+                        .map(|values| {
+                            crate::vertex_attributes::tangent(
+                                transform,
+                                normal,
+                                values[index],
+                                mirrored,
+                            )
+                        })
+                        .transpose()?
+                        .unwrap_or([0; 4]);
+                    let color = colors
+                        .as_ref()
+                        .map(|values| crate::vertex_attributes::color(values[index]))
+                        .transpose()?
+                        .unwrap_or([255; 4]);
+                    Ok(mesh::Vertex {
                         position: point(transform, position, scale),
-                        normal: normal.map(|v| v / length),
+                        normal,
                         uv,
-                        tangent: [0; 4],
-                        color: [255; 4],
-                    }
+                        tangent,
+                        color,
+                    })
                 })
-                .collect();
+                .collect::<Result<Vec<_>>>()?;
             let triangles = indices
                 .chunks_exact(3)
                 .map(|t| {

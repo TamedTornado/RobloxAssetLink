@@ -15,7 +15,9 @@ pub struct Vertex {
     pub position: [f32; 3],
     pub normal: [f32; 3],
     pub uv: [f32; 2],
-    pub tangent: [i8; 4],
+    /// Packed biased bytes: component = (byte - 127) / 127.
+    /// All zero is the historical missing-tangent marker.
+    pub tangent: [u8; 4],
     pub color: [u8; 4],
 }
 
@@ -67,7 +69,7 @@ pub fn encode(mesh: &Mesh) -> Result<Vec<u8>> {
         {
             bytes.extend_from_slice(&value.to_le_bytes());
         }
-        bytes.extend(vertex.tangent.map(|value| value as u8));
+        bytes.extend(vertex.tangent);
         bytes.extend(vertex.color);
     }
     for index in mesh.triangles.iter().flatten() {
@@ -87,7 +89,7 @@ mod tests {
                     position: [1., 2., 3.],
                     normal: [0., 1., 0.],
                     uv: [0.25, 0.75],
-                    tangent: [-127, 0, 127, -1],
+                    tangent: [127, 127, 0, 254],
                     color: [1, 2, 3, 4],
                 };
                 3
@@ -107,7 +109,7 @@ mod tests {
         assert_eq!(&bytes[25..29], &1_f32.to_le_bytes());
         assert_eq!(&bytes[49..53], &0.25_f32.to_le_bytes());
         assert_eq!(&bytes[53..57], &0.75_f32.to_le_bytes());
-        assert_eq!(&bytes[57..65], &[129, 0, 127, 255, 1, 2, 3, 4]);
+        assert_eq!(&bytes[57..65], &[127, 127, 0, 254, 1, 2, 3, 4]);
         assert_eq!(&bytes[145..], &[0, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0]);
         assert_eq!(bytes, encode(&triangle()).unwrap());
     }

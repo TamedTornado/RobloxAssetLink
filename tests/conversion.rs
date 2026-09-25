@@ -154,6 +154,71 @@ fn gltf_local_and_embedded_buffers_match_glb_and_reject_remote_or_escaped_paths(
 }
 
 #[test]
+fn gltf_preserves_colors_and_transforms_tangent_handedness() {
+    let temporary = tempfile::tempdir().unwrap();
+    let mut binary = Vec::new();
+    let attributes: [&[f32]; 5] = [
+        &[0., 0., 0., 1., 0., 0., 0., 1., 0.],
+        &[0., 0., 1., 0., 0., 1., 0., 0., 1.],
+        &[0., 0., 1., 0., 0., 1.],
+        &[1., 0., 0., 1., 1., 0., 0., 1., 1., 0., 0., 1.],
+        &[0.2, 0.4, 0.6, 0.8, 0.2, 0.4, 0.6, 0.8, 0.2, 0.4, 0.6, 0.8],
+    ];
+    let mut views = Vec::new();
+    for attribute in attributes {
+        let offset = binary.len();
+        for component in attribute {
+            binary.extend_from_slice(&component.to_le_bytes());
+        }
+        views.push(
+            serde_json::json!({"buffer":0,"byteOffset":offset,"byteLength":binary.len()-offset}),
+        );
+    }
+    let document = serde_json::json!({
+        "asset":{"version":"2.0"}, "scene":0, "scenes":[{"nodes":[0]}],
+        "nodes":[{"name":"colored","mesh":0,"scale":[-2,3,1]}],
+        "meshes":[{"primitives":[{"attributes":{"POSITION":0,"NORMAL":1,"TEXCOORD_0":2,"TANGENT":3,"COLOR_0":4}}]}],
+        "buffers":[{"byteLength":binary.len(),"uri":format!("data:application/octet-stream;base64,{}",base64::engine::general_purpose::STANDARD.encode(&binary))}],
+        "bufferViews":views,
+        "accessors":[
+            {"bufferView":0,"componentType":5126,"count":3,"type":"VEC3","min":[0,0,0],"max":[1,1,0]},
+            {"bufferView":1,"componentType":5126,"count":3,"type":"VEC3"},
+            {"bufferView":2,"componentType":5126,"count":3,"type":"VEC2"},
+            {"bufferView":3,"componentType":5126,"count":3,"type":"VEC4"},
+            {"bufferView":4,"componentType":5126,"count":3,"type":"VEC4"}
+        ]
+    });
+    let source = temporary.path().join("colored.gltf");
+    fs::write(&source, serde_json::to_vec(&document).unwrap()).unwrap();
+    let output = temporary.path().join("out");
+    let manifest = convert(
+        &source,
+        &output,
+        &Config {
+            metres_per_stud: 1.,
+            obj_metres_per_unit: None,
+        },
+    )
+    .unwrap();
+    let bytes = fs::read(output.join(&manifest.meshes[0].file)).unwrap();
+    for vertex in 0..3 {
+        assert_eq!(
+            &bytes[25 + vertex * 40 + 32..25 + vertex * 40 + 40],
+            &[0, 127, 127, 0, 51, 102, 153, 204]
+        );
+    }
+    let face = 25 + 3 * 40;
+    assert_eq!(
+        [
+            u32_at(&bytes, face),
+            u32_at(&bytes, face + 4),
+            u32_at(&bytes, face + 8)
+        ],
+        [0, 2, 1]
+    );
+}
+
+#[test]
 fn real_assets_encode_deterministically_with_consistent_native_layout() {
     let temporary = tempfile::tempdir().unwrap();
     let config = Config {

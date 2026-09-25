@@ -25,10 +25,11 @@ The static adapter bakes scene transforms into positions, applies inverse
 transpose normals, fixes reflected winding, retains UV0 and records material
 factors in the manifest. This is geometry conversion, not finished scene assembly:
 pivot/hierarchy reconstruction belongs to the place/model issue. Textures,
-skinning, animation, morphs, vertex colors, source tangents, extra vertex channels
-and extensions currently fail explicitly. Native vertex colors and tangents are
-supported by the encoder itself; this adapter emits white colors and zero tangent
-bytes for its untextured profile. It does not claim tangent-space shading support.
+skinning, animation, morphs, extra vertex channels and extensions currently fail
+explicitly. The GLB/glTF adapter preserves COLOR_0 and TANGENT, including alpha
+and transformed tangent handedness. FBX/OBJ color/tangent channels remain rejected
+until equivalent adapter handling is added. Missing colors are white and missing
+tangents use the historical zero marker; no tangent generation is claimed.
 Collision is opt-in through a separate JSON recipe and is otherwise explicitly
 reported as not generated. See [collision implementation](collision-format.md).
 Material factors are metadata,
@@ -42,8 +43,13 @@ MIT OR Apache-2.0. No Python implementation is invoked or copied.
 - ASCII signature `version 2.00` followed by LF.
 - Little-endian header: u16 header size 12; u8 vertex stride 40; u8 face stride 12;
   u32 vertex count; u32 face count.
-- Each vertex: position (3 f32), normal (3 f32), UV (2 f32), packed tangent (4 i8),
+- Each vertex: position (3 f32), normal (3 f32), UV (2 f32), packed tangent (4 bytes),
   color (4 u8). The tangent bytes are not a third UV float.
+- Tangents use biased values: `(byte - 127) / 127`, with handedness byte 0 or 254.
+  The structural Rust reference represents them as i8 but does not unpack their
+  semantics. The bias is independently documented by
+  [MaximumADHD's mesh reader](https://github.com/MaximumADHD/cage-mesh-deformer/blob/main/Modules/RobloxMesh.lua).
+  Tests check its documented negative-Z tangent example and reflected transforms.
 - Each face: three zero-based u32 indices.
 
 These lengths are protocol constants, not runtime limits. The 32-bit counts are
