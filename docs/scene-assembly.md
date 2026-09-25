@@ -31,13 +31,24 @@ builds are tested for identical bytes, followed by native deserialization checks
 on hierarchy, properties, scripts and references. The schema is general, with no
 LayerOne names or conventions.
 
+Explicit pivot regression covers Model.WorldPivotData, MeshPart.PivotOffset,
+MeshPart.CFrame/Size and a nested model's PrimaryPart reference. Nonidentity
+rotation, offset and world placement survive native serialization unchanged;
+the writer does not apply the parent model pivot a second time to the child.
+
+An independently authored native terrain fixture additionally verifies exact
+voxel/physics bytes, material palette and water properties through place assembly.
+See [terrain inventory](terrain-format.md) and its separate generation issue.
+
 ## Outstanding integration and reproducibility work
 
 Bundle assembly supports explicit mesh/collision/texture bindings and native
 material attachment; see [offline bundles](offline-bundles.md). It does not yet
 automatically turn a geometry conversion manifest into properly sized/pivoted
-MeshParts or assemble terrain and rigs. Those remain issue 7 work; plain instance
-serialization alone does not close it. No remote asset ids are generated here
+MeshParts or automatically assemble rigs. Terrain payload generation is now
+tracked separately in issue 10; preservation of supplied native terrain data is
+tested. Plain instance serialization does not prove the remaining integration
+work complete. No remote asset ids are generated here
 and no game is published.
 
 Serialization uses the pinned bundled reflection database. The dependency's

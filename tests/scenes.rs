@@ -13,6 +13,55 @@ fn specification() -> serde_json::Value {
 }
 
 #[test]
+fn explicit_model_and_part_pivots_survive_without_rebaking_child_transforms() {
+    use rbx_dom_weak::types::{CFrame, Matrix3, Variant, Vector3};
+    let pivot = CFrame::new(Vector3::new(-3.0, 7.0, 11.0), Matrix3::identity());
+    let offset = CFrame::new(
+        Vector3::new(2.0, -1.0, 0.5),
+        Matrix3::new(
+            Vector3::new(0.0, 0.0, 1.0),
+            Vector3::new(0.0, 1.0, 0.0),
+            Vector3::new(-1.0, 0.0, 0.0),
+        ),
+    );
+    let placement = CFrame::new(Vector3::new(100.0, 20.0, -50.0), Matrix3::identity());
+    let spec = json!({"kind":"model","roots":[{"id":"outer","class":"Model","name":"Outer","properties":{"WorldPivotData":Variant::OptionalCFrame(Some(pivot))},"references":{},"children":[
+        {"id":"inner","class":"Model","name":"Inner","properties":{},"references":{"PrimaryPart":"part"},"children":[
+            {"id":"part","class":"MeshPart","name":"Mesh","properties":{"CFrame":Variant::CFrame(placement),"PivotOffset":Variant::CFrame(offset),"Size":Variant::Vector3(Vector3::new(8.0,12.0,4.0))},"references":{},"children":[]}
+        ]}
+    ]}]});
+    let temp = tempfile::tempdir().unwrap();
+    let source = temp.path().join("pivots.json");
+    fs::write(&source, spec.to_string()).unwrap();
+    let output = temp.path().join("pivots.rbxm");
+    build(&source, &output).unwrap();
+    let dom = rbx_binary::from_reader(fs::File::open(output).unwrap()).unwrap();
+    let outer = dom.get_by_ref(dom.root().children()[0]).unwrap();
+    let inner = dom.get_by_ref(outer.children()[0]).unwrap();
+    let part = dom.get_by_ref(inner.children()[0]).unwrap();
+    assert_eq!(
+        outer.properties[&"WorldPivotData".into()],
+        Variant::OptionalCFrame(Some(pivot))
+    );
+    assert_eq!(
+        part.properties[&"PivotOffset".into()],
+        Variant::CFrame(offset)
+    );
+    assert_eq!(
+        part.properties[&"CFrame".into()],
+        Variant::CFrame(placement)
+    );
+    assert_eq!(
+        part.properties[&"Size".into()],
+        Variant::Vector3(Vector3::new(8.0, 12.0, 4.0))
+    );
+    assert_eq!(
+        inner.properties[&"PrimaryPart".into()],
+        Variant::Ref(part.referent())
+    );
+}
+
+#[test]
 fn native_scene_preserves_hierarchy_scripts_references_and_repeatable_bytes() {
     let temporary = tempfile::tempdir().unwrap();
     let source = temporary.path().join("scene.json");
