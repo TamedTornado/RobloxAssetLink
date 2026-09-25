@@ -9,10 +9,6 @@ autobins = false
 name = "roblox"
 path = "src/cli.rs"
 
-[[bin]]
-name = "roblox-server"
-path = "src/server.rs"
-
 [dependencies]
 clap = { version = "4", features = ["derive"] }
 gltf = { version = "1.4", default-features = false, features = ["utils", "names"] }
@@ -20,7 +16,6 @@ glam = "=0.33.10"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["float_roundtrip"] }
 sha2 = "0.10"
-tiny_http = "0.12"
 uuid = { version = "1", features = ["v4"] }
 
 tempfile = "3"

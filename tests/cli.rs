@@ -145,8 +145,13 @@ fn capabilities_and_argument_errors_are_machine_readable() {
     assert!(output.status.success());
     let value: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(value["result"]["persistentStudioImport"], false);
+    assert!(value["result"].get("serverExecutable").is_none());
 
-    for arguments in [vec!["assets", "list"], vec!["assets", "not-a-command"]] {
+    for arguments in [
+        vec!["assets", "list"],
+        vec!["assets", "not-a-command"],
+        vec!["serve"],
+    ] {
         let output = Command::new(env!("CARGO_BIN_EXE_roblox"))
             .args(arguments)
             .output()

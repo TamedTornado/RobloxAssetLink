@@ -148,7 +148,7 @@ enum Convert {
         #[arg(long)]
         output: PathBuf,
     },
-    /// Normalize images and PBR maps locally to PNG artifacts.
+    /// Convert images and PBR maps locally to configured PNG or DDS artifacts.
     Texture {
         source: PathBuf,
         #[arg(long)]
@@ -424,7 +424,7 @@ fn execute(cli: Cli) -> Result<Value> {
                 "sampled-fbx-animation-to-rbxm","rigid-bind-gltf-to-skinned-mesh-v4",
                 "linear-fbx-to-skinned-mesh-v4"
             ],"offlineGameBuild":false,
-            "serverExecutable":"roblox-server","requiresStudioForCatalog":false,
+            "requiresStudioForCatalog":false,
             "persistentStudioImport":false,"studioCommandExecution":false
         }}));
     };
