@@ -28,10 +28,10 @@ These require OpenGL tangent normals and grayscale metalness/roughness maps.
 PNG, DDS, MP3 and Ogg samples also exist in the locally installed Studio content;
 their presence is not proof of cloud upload behavior or of every client target.
 
-Still open: mesh/material dependency integration, additional material semantics,
-color-managed/HDR handling, mipmap/platform-cache requirements and native scene
-acceptance. TexturePack encoding is not implemented. Passing pixel tests does
-not close the full image/material issue.
+Mesh/material dependency integration is implemented below. Still open are
+mipmap/platform-cache requirements and TexturePack encoding/semantics. Color
+management and HDR remain explicitly unsupported profiles. Passing pixel tests
+does not close the full image/material issue.
 
 ## Native material assembly
 
@@ -126,3 +126,59 @@ This does not establish every referenced image's runtime encoding. Usage-version
 semantics, accepted content-reference forms, target-specific texture processing
 and native acceptance still need verification before shipping a writer. No
 unknown enum meanings or image-compression steps have been guessed into code.
+
+## PC native texture inventory and mip chains
+
+Read-only inspection of the same installed version's `PlatformContent` found
+31 DDS files, all under `pc`. They are runtime/platform assets, not evidence that
+the upload API accepts DDS. Their standard headers provide more specific evidence
+than the mere presence of filenames:
+
+| Representative path under `PlatformContent/pc/textures` | Encoding | Dimensions | Stored mip count | Matching files |
+| --- | --- | --- | --- | --- |
+| `plastic/diffuse.dds` | DXT1 | 128 × 2048 | 12 | 2 |
+| `plastic/normal.dds` | DXT5 with additional metadata described below | 128 × 2048 | 12 | 2 |
+| `water/normal_01.dds` | DXT5 | 256 × 256 | 9 | 25 |
+| `brdfLUT.dds` | DX10, DXGI 34 (R16G16_FLOAT) | 256 × 256 | 1 | 1 |
+| `wangIndex.dds` | 16-bit luminance/alpha, masks 0xff / 0xff00 | 128 × 128 | 0 (base image) | 1 |
+
+Counts group identical pixel-format headers, not identical dimensions or content.
+The diffuse, plastic-normal and water-normal byte sizes are respectively 174984,
+349840 and 87536. These exactly match a 128-byte header plus complete block-
+compressed mip chains down to 1 × 1 under the documented
+[DDS layout](https://learn.microsoft.com/en-us/windows/win32/direct3ddds/dds-file-layout-for-textures).
+The LUT is 262292 bytes: 148-byte DX10 header plus 256 × 256 × 4 pixel bytes.
+[DXGI 34](https://learn.microsoft.com/en-us/windows/win32/api/dxgiformat/ne-dxgiformat-dxgi_format)
+denotes two half-float components. The index file is 32896 bytes: a 128-byte
+header plus 128 × 128 × 2 bytes. No external images are copied into this repo.
+
+Representative SHA-256 hashes, in table order:
+
+- `7a8f26459881d30aab83e8a47cf01871a6110514cd77ac221703586f3abf76c0`
+- `b36dc03dde37e5687214699e212d7f6957c20c27c6cdb1b7e2728396f868ff7d`
+- `cf6a9349b316f78158f345094a456e52c70f929048f7c0c0a3a8eebff8517cc5`
+- `5cc50688061dc9ed221d41591a129e6037db5b7d836532081cdad03a6559d004`
+- `2b1bd51ec8cc19a918fe5c6578c02db9568533e20e3e31909e8fc85a8706b681`
+
+The plastic normal header has pixel flags `0x80000004` and the bytes `A2D5`
+where ordinary FOURCC DDS leaves the RGB bit-count field unused. Its meaning
+has not been established. Do not treat its compressed channels as ordinary
+OpenGL RGB normals merely because its main FOURCC is DXT5. The water normal
+files do not have this extra marker. A universal normal-map compression recipe
+would therefore be premature.
+
+The inspected native DDS reader checks the magic at `0x1448f9983`, reads the
+DX10 extension when present, dispatches legacy DXT1/3/5 and ATI1/2 at
+`0x1448f9c31–0x1448f9c94`, and handles uncompressed scalar/two-channel layouts
+at `0x1448f9b6a–0x1448f9c22`. Mip-count handling at
+`0x1448f9d44–0x1448f9dbd` distinguishes absent/base-only from supplied chains;
+later branches select mip levels using caller flags. These observations establish
+a real native DDS ingestion path, not that every surface must use DDS or that
+every device supports the same payload.
+
+**Implementation consequence:** PNG normalization is not yet the whole offline
+texture pipeline. Add explicitly selected native DDS/mipmap outputs with semantic
+filtering and independent decoding tests; do not silently replace PNGs with a
+guessed platform cache. Keep TexturePack material descriptors separate from pixel
+encoding. Further evidence is needed for the marked normal encoding and the
+renderer/TexturePack relationship. Issue 5 remains open.
