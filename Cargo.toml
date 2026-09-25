@@ -30,6 +30,7 @@ parry3d = { version = "=0.31.1", features = ["enhanced-determinism"] }
 image = { version = "=0.25.9", default-features = false, features = ["png", "jpeg", "bmp", "tga"] }
 rbx_binary = "=3.0.0"
 rbx_dom_weak = "=4.2.0"
+rbx_reflection = "=7.0.0"
 rbx_reflection_database = { version = "=3.0.0", features = ["debug_always_use_bundled"] }
 mlua = { version = "=0.11.4", features = ["luau", "vendored", "error-send"] }
 symphonia = { version = "=0.5.5", default-features = false, features = ["wav", "pcm", "ogg", "vorbis", "flac", "mp3"] }

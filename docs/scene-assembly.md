@@ -11,6 +11,13 @@ the bundled reflection database. References resolve by input id after all nodes
 exist; unknown targets and duplicate ids fail. Name/Parent cannot be overridden
 by arbitrary property values. Output creation is atomic and does not overwrite.
 
+Admission checks the reflection serialization rule as well as the API name.
+Runtime-only properties are rejected rather than silently dropped; aliases and
+migrations cannot write the same serialized destination twice. Explicit values
+must match the property's declared type, and instance references require a Ref
+property. Regressions cover runtime-only mass, competing old/new animation
+content properties, wrong value types and references assigned to booleans.
+
 `scriptSource` may name a UTF-8 source file under the scene document directory for
 Script, LocalScript or ModuleScript. Absolute paths and symlink/directory escapes
 fail. A scene containing file or inline script source requires a `scriptCompiler`

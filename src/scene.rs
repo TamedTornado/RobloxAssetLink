@@ -4,10 +4,11 @@ use rbx_dom_weak::{
     InstanceBuilder, WeakDom,
     types::{Content, ContentId, NetAssetRef, Ref, SharedString, Variant, VariantType},
 };
+use rbx_reflection::{PropertyDescriptor, PropertyKind, PropertySerialization};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{
-    collections::{BTreeMap, HashMap},
+    collections::{BTreeMap, HashMap, HashSet},
     fs,
     io::Write,
     path::{Path, PathBuf},
@@ -56,7 +57,10 @@ pub struct ResolvedAsset {
 
 pub type AssetMap = BTreeMap<AssetReference, ResolvedAsset>;
 
-fn property_type(class: &str, property: &str) -> Result<VariantType> {
+fn property_descriptor(
+    class: &str,
+    property: &str,
+) -> Result<&'static PropertyDescriptor<'static>> {
     let database = rbx_reflection_database::get_bundled();
     let mut current = Some(class);
     while let Some(name) = current {
@@ -65,11 +69,90 @@ fn property_type(class: &str, property: &str) -> Result<VariantType> {
             .get(name)
             .ok_or_else(|| format!("unknown scene class: {name}"))?;
         if let Some(descriptor) = descriptor.properties.get(property) {
-            return Ok(descriptor.data_type.ty());
+            return Ok(descriptor);
         }
         current = descriptor.superclass;
     }
     Err(format!("unknown property {class}.{property}").into())
+}
+
+fn property_type(class: &str, property: &str) -> Result<VariantType> {
+    Ok(property_descriptor(class, property)?.data_type.ty())
+}
+
+/// Resolve names which actually reach the file, not just names in the API.
+fn serialized_names(
+    class: &str,
+    property: &str,
+    visiting: &mut HashSet<String>,
+) -> Result<Vec<String>> {
+    if !visiting.insert(property.to_owned()) {
+        return Err(format!("cyclic property serialization: {class}.{property}").into());
+    }
+    let descriptor = property_descriptor(class, property)?;
+    let result = match &descriptor.kind {
+        PropertyKind::Alias { alias_for } => serialized_names(class, alias_for, visiting)?,
+        PropertyKind::Canonical { serialization } => match serialization {
+            PropertySerialization::Serializes => vec![property.to_owned()],
+            // SerializesAs targets are storage descriptors and need not be
+            // independently serializable through the public API.
+            PropertySerialization::SerializesAs(name) => vec![(*name).to_owned()],
+            PropertySerialization::Migrate(migration) => {
+                let mut names = Vec::new();
+                for target in migration.new_property_names() {
+                    names.extend(serialized_names(class, target, visiting)?);
+                }
+                names
+            }
+            PropertySerialization::DoesNotSerialize => {
+                return Err(format!("property {class}.{property} does not serialize").into());
+            }
+            _ => return Err("unsupported property serialization rule".into()),
+        },
+        _ => return Err("unsupported property descriptor kind".into()),
+    };
+    visiting.remove(property);
+    Ok(result)
+}
+
+fn validate_properties(node: &Node) -> Result<()> {
+    let mut destinations = HashMap::new();
+    for property in node
+        .properties
+        .keys()
+        .chain(node.references.keys())
+        .chain(node.assets.keys())
+    {
+        for destination in serialized_names(&node.class, property, &mut HashSet::new())? {
+            if let Some(previous) = destinations.insert(destination.clone(), property) {
+                return Err(format!(
+                    "scene properties {previous} and {property} both serialize to {destination}"
+                )
+                .into());
+            }
+        }
+    }
+    for (property, value) in &node.properties {
+        let expected = property_type(&node.class, property)?;
+        if expected != value.ty() {
+            return Err(format!(
+                "property {}.{property} requires {expected:?}, got {:?}",
+                node.class,
+                value.ty()
+            )
+            .into());
+        }
+    }
+    for property in node.references.keys() {
+        if property_type(&node.class, property)? != VariantType::Ref {
+            return Err(format!(
+                "property {}.{property} is not an instance reference",
+                node.class
+            )
+            .into());
+        }
+    }
+    Ok(())
 }
 
 #[derive(Serialize)]
@@ -98,14 +181,7 @@ fn insert(
     if !database.classes.contains_key(node.class.as_str()) {
         return Err(format!("unknown scene class: {}", node.class).into());
     }
-    for property in node
-        .properties
-        .keys()
-        .chain(node.references.keys())
-        .chain(node.assets.keys())
-    {
-        property_type(&node.class, property)?;
-    }
+    validate_properties(node)?;
     if ids.contains_key(&node.id) {
         return Err(format!("duplicate scene id: {}", node.id).into());
     }

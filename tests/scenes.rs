@@ -69,6 +69,53 @@ fn malformed_scenes_fail_before_creating_output() {
 }
 
 #[test]
+fn scene_rejects_unsaved_properties_conflicting_migrations_and_wrong_types() {
+    let temporary = tempfile::tempdir().unwrap();
+    let source = temporary.path().join("scene.json");
+    let output = temporary.path().join("out.rbxm");
+    let cases = [
+        (
+            "Part",
+            json!({"AssemblyMass":{"Float32":1.}}),
+            json!({}),
+            "does not serialize",
+        ),
+        (
+            "Animation",
+            json!({
+                "AnimationId":{"ContentId":"rbxassetid://123"},
+                "AnimationContent":{"Content":{"Uri":"rbxassetid://456"}}
+            }),
+            json!({}),
+            "both serialize to AnimationContent",
+        ),
+        (
+            "Part",
+            json!({"Anchored":{"String":"true"}}),
+            json!({}),
+            "requires Bool",
+        ),
+        (
+            "Part",
+            json!({}),
+            json!({"Anchored":"node"}),
+            "not an instance reference",
+        ),
+    ];
+
+    for (class, properties, references, expected) in cases {
+        let spec = json!({"kind":"model", "roots":[{
+            "id":"node", "class":class, "name":"test",
+            "properties":properties, "references":references,"children":[]
+        }]});
+        fs::write(&source, serde_json::to_vec(&spec).unwrap()).unwrap();
+        let error = build(&source, &output).err().unwrap().to_string();
+        assert!(error.contains(expected), "expected {expected}, got {error}");
+        assert!(!output.exists());
+    }
+}
+
+#[test]
 fn place_cli_builds_offline_and_script_paths_cannot_escape() {
     let temporary = tempfile::tempdir().unwrap();
     let source_root = temporary.path().join("source");
