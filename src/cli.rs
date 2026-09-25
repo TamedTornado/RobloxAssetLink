@@ -16,7 +16,7 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Prepare deployment outputs separately from offline conversion/build.
+    /// Upload, link and publish verified outputs separately from offline builds.
     Deploy {
         #[command(subcommand)]
         command: Deploy,

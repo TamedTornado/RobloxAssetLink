@@ -5,6 +5,9 @@ conversion recipe or sends source GLB/FBX files to Roblox's importer. Build/CI
 checks remain credential-free and network-free; only explicit `deploy` cloud
 commands contact Roblox.
 
+Build and install the executable with `cargo build --release --locked`, then
+copy `target/release/roblox` to a directory on PATH (for example `~/.local/bin`).
+
 ```sh
 roblox verify-bundle game-bundle
 roblox deploy upload game-bundle --config deployment.json --state .roblox-deploy

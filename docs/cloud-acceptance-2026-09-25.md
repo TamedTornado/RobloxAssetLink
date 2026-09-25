@@ -8,6 +8,19 @@ see [the focused investigation](dds-import-upload-investigation.md).
 
 ## Current publishing outcome
 
+### Product CLI completed after the runtime proof
+
+The [native deployment CLI](deployment-cli.md) subsequently completed the actual
+upload/link/publish loop against the same private acceptance experience. Version
+9 uploaded ten dependencies; an unchanged rerun reused all IDs and the version.
+A one-normal-map iteration uploaded only that map and its two dependent packs,
+reused seven other assets, and published version 10. Both exact place versions
+were downloaded by the CLI and matched the locally linked bytes. Full details
+and hashes are in [deployment acceptance](deployment-boundary.md#cli-acceptance--september-25-2026).
+The implementation-gap statements in older chronological entries below are
+historical, not remaining issue-9 work. Renderer proof is the version-8 test;
+the CLI does not mislabel upload/moderation success as a fresh engine test.
+
 ### Resolved: published PBR visibly works in actual play mode
 
 The earlier thumbnail-only uncertainty below is superseded by a direct client

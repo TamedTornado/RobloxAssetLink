@@ -380,6 +380,25 @@ fn completed_operation_error_is_visible_and_never_reuploaded_on_resume() {
             .count(),
         1
     );
+    let state = temp.path().join("state");
+    let journal: cloud_deploy::Journal =
+        serde_json::from_slice(&fs::read(state.join("receipts.json")).unwrap()).unwrap();
+    let key = journal.uploads.keys().next().unwrap();
+    assert_eq!(
+        cloud_deploy::retry_upload(&bundle, &config, &state, key).unwrap()["retryScheduled"],
+        true
+    );
+    assert!(cloud_deploy::execute(&bundle, &config, &state, false).is_err());
+    assert_eq!(
+        server
+            .requests
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|r| r.method == "POST")
+            .count(),
+        2
+    );
 }
 
 #[test]
