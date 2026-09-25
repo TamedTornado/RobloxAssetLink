@@ -15,6 +15,7 @@ pub mod mesh;
 pub mod scene;
 pub mod scripts;
 pub mod skin;
+pub mod skin_gltf;
 mod source_mesh;
 pub mod texture;
 mod vertex_attributes;

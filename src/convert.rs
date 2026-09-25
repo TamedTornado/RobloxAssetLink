@@ -61,14 +61,23 @@ pub(crate) struct Output {
     pub geometry: mesh::Mesh,
 }
 
-fn visit(
+#[derive(Clone, Copy)]
+pub(crate) enum GeometryProfile {
+    Static,
+    Skin,
+}
+
+pub(crate) fn visit(
     node: gltf::Node<'_>,
     transform: Matrix,
     buffers: &[Vec<u8>],
     scale: f32,
+    profile: GeometryProfile,
     outputs: &mut Vec<Output>,
 ) -> Result<()> {
-    if node.skin().is_some() || node.camera().is_some() {
+    if (node.skin().is_some() && matches!(profile, GeometryProfile::Static))
+        || node.camera().is_some()
+    {
         return Err("static mesh conversion does not support skins or cameras".into());
     }
     let (normal_transform, mirrored) = normal_matrix(transform)?;
@@ -83,6 +92,14 @@ fn visit(
                 );
             }
             for (semantic, _) in primitive.attributes() {
+                if matches!(profile, GeometryProfile::Skin)
+                    && matches!(
+                        semantic,
+                        gltf::Semantic::Joints(0) | gltf::Semantic::Weights(0)
+                    )
+                {
+                    continue;
+                }
                 if !matches!(
                     semantic,
                     gltf::Semantic::Positions
@@ -116,9 +133,10 @@ fn visit(
             let normals: Vec<_> = reader.read_normals().ok_or("normals required")?.collect();
             let uvs: Vec<_> = reader
                 .read_tex_coords(0)
-                .ok_or("UV0 required")?
-                .into_f32()
-                .collect();
+                .map(|values| values.into_f32().collect())
+                // This profile already rejects every texture dependency. UVs
+                // have no source meaning when absent on an untextured mesh.
+                .unwrap_or_else(|| vec![[0.; 2]; positions.len()]);
             if positions.len() != normals.len() || positions.len() != uvs.len() {
                 return Err("mesh attribute counts do not match".into());
             }
@@ -247,6 +265,7 @@ fn read_gltf(source: &Path, bytes: &[u8], config: &Config) -> Result<Vec<Output>
             transform,
             &buffers,
             config.metres_per_stud,
+            GeometryProfile::Static,
             &mut outputs,
         )?;
         pending.extend(node.children().map(|child| (child, transform)));

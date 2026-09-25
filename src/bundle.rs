@@ -25,6 +25,10 @@ pub struct Asset {
 #[derive(Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 pub enum Conversion {
+    Skin {
+        source: PathBuf,
+        config: crate::skin_gltf::Config,
+    },
     AnimationGltf {
         source: PathBuf,
         config: crate::animation_gltf::Config,
@@ -101,6 +105,10 @@ fn key(id: &str) -> String {
 
 fn build_asset(root: &Path, output: &Path, asset: &Asset) -> Result<Vec<String>> {
     match &asset.conversion {
+        Conversion::Skin { source, config } => {
+            let manifest = crate::skin_gltf::convert(&local(root, source)?, output, config)?;
+            Ok(manifest.meshes.into_iter().map(|mesh| mesh.file).collect())
+        }
         Conversion::AnimationGltf { source, config } => {
             fs::create_dir(output)?;
             let manifest = crate::animation_gltf::convert(

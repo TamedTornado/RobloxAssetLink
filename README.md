@@ -22,6 +22,10 @@ collision cooking is available with `--collision-config examples/collision-hull.
 see [collision format evidence](docs/collision-format.md). Neither output is yet
 claimed as a complete game or engine/deployment-verified asset.
 
+`roblox convert skin` imports rigid-bind GLB/glTF skins into native v4.01 meshes,
+including source-joint remapping and metric bind transforms. It is also available
+in offline bundles; see [skinned mesh conversion](docs/skinned-mesh-format.md).
+
 `roblox convert texture` also performs local PNG normalization, normal-map
 convention conversion and PBR channel splitting; see
 [texture conversion](docs/texture-conversion.md) for its explicit configuration.

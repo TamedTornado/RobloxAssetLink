@@ -7,6 +7,8 @@ and `scenes` lists, each with explicit logical ids. Asset conversions select
 `animation` accepts canonical rest-relative clip JSON and emits a native
 KeyframeSequence. `animationGltf` imports the explicit rigid LINEAR glTF/GLB
 profile described in [animation conversion](animation-format.md).
+`skin` imports the rigid-bind GLB/glTF profile into native v4.01 meshes and keeps
+the source-node/bind hierarchy in its conversion manifest.
 Scene sources use the existing typed scene format and compiler gate.
 
 Input paths are relative to the plan directory. Absolute paths, source escapes,

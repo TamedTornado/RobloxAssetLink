@@ -1,0 +1,6 @@
+{
+  "meshNode": 2,
+  "metresPerStud": 0.28,
+  "cullDistanceMetres": 20,
+  "rigidTolerance": 0.00001
+}
