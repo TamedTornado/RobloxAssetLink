@@ -24,6 +24,7 @@ pub mod skin_import;
 mod source_mesh;
 pub mod texture;
 mod vertex_attributes;
+pub mod video;
 use config::{Config, PartSettings};
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;

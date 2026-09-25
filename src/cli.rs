@@ -66,6 +66,14 @@ enum Build {
 
 #[derive(Subcommand)]
 enum Convert {
+    /// Convert a supported local silent video to VP9/WebM in process.
+    Video {
+        source: PathBuf,
+        #[arg(long)]
+        config: PathBuf,
+        #[arg(long)]
+        output: PathBuf,
+    },
     /// Extract a core glTF PBR material and bake factors into native texture maps.
     MaterialGltf {
         source: PathBuf,
@@ -330,6 +338,19 @@ fn execute(cli: Cli) -> Result<Value> {
         let manifest = roblox_asset_link::material_gltf::convert(source, output, &config)?;
         return Ok(json!({"ok":true,"scope":"offlineConversion","result":manifest}));
     }
+    if let Command::Convert {
+        command:
+            Convert::Video {
+                source,
+                config,
+                output,
+            },
+    } = &cli.command
+    {
+        let config = serde_json::from_slice(&std::fs::read(config)?)?;
+        let manifest = roblox_asset_link::video::convert(source, output, &config)?;
+        return Ok(json!({"ok":true,"scope":"offlineConversion","result":manifest}));
+    }
     let Command::Assets {
         catalog: path,
         command,
@@ -340,7 +361,7 @@ fn execute(cli: Cli) -> Result<Value> {
             "localLuauCompilation":true,
             "offlineSceneSerialization":true,
             "offlineAssetBundleBuild":true,
-            "offlineConversion":["static-gltf-to-mesh-v2","static-fbx-to-mesh-v2","static-obj-to-mesh-v2","textures-to-png","material-to-surface-appearance","gltf-material-to-surface-appearance","collision-to-csgphs-v5","audio-to-ogg-vorbis","canonical-animation-to-rbxm","rigid-linear-gltf-animation-to-rbxm","sampled-fbx-animation-to-rbxm","rigid-bind-gltf-to-skinned-mesh-v4","linear-fbx-to-skinned-mesh-v4"],"offlineGameBuild":false,
+            "offlineConversion":["static-gltf-to-mesh-v2","static-fbx-to-mesh-v2","static-obj-to-mesh-v2","textures-to-png","material-to-surface-appearance","gltf-material-to-surface-appearance","collision-to-csgphs-v5","audio-to-ogg-vorbis","silent-video-to-webm-vp9","canonical-animation-to-rbxm","rigid-linear-gltf-animation-to-rbxm","sampled-fbx-animation-to-rbxm","rigid-bind-gltf-to-skinned-mesh-v4","linear-fbx-to-skinned-mesh-v4"],"offlineGameBuild":false,
             "serverExecutable":"roblox-server","requiresStudioForCatalog":false,
             "persistentStudioImport":false,"studioCommandExecution":false
         }}));

@@ -66,4 +66,47 @@ The next video implementation decision must distinguish the Roblox sampler's
 actual format/codec dispatch from Studio UI playback and from generic WebRTC.
 WebM/VPX is a concrete candidate now, but a reader/dispatch trace and known-good
 consumer sample are still needed before claiming a native target profile.
-No video conversion command is advertised as working yet.
+Further tracing identified `0x1434d8a00–0x1434d8b0a`, called from WebM input-open.
+It compares exact codec identifiers and returns distinct values for V_VP8,
+V_VP9, V_AV1, A_OPUS and A_VORBIS, with zero for unknown IDs. This establishes
+reader dispatch, not every platform's decoder or VideoFrame acceptance.
+
+## In-process video profile
+
+`roblox convert video SOURCE --config CONFIG --output video.webm` uses linked
+FFmpeg/libvpx through Rust `ffmpeg-next`, not a codec executable. Reimplementing
+H.264/VP9 would be substantial codec work rather than Roblox packaging work.
+Bundle conversion kind `video` emits `video.webm`; scene VideoFrame.VideoContent
+uses the existing asset binding mechanism.
+
+Config requires positive `maxWidth`, `maxHeight`, `maxFrames`, `bitrate`, plus
+VP9 `crf` in the codec's fixed 0–63 range. Supported inputs are local MP4/MOV or
+Matroska/WebM with one silent video stream, known constant frame rate, progressive
+8-bit YUV420P and even dimensions. Dimensions/rate are retained and the first
+presentation timestamp rebased to zero. Color-space/range/primaries/transfer/
+chroma metadata and sample aspect ratio are passed to the encoder. No resizing
+or implicit pixel-format/color conversion occurs.
+
+Audio/subtitle/multiple streams, stream side data including rotation, missing
+timestamps, variable timing, interlacing, changing dimensions/pixel formats,
+decode errors and policy violations fail rather than dropping content. Network
+protocols and playlist demuxers are excluded; MOV external data references are
+disabled. Frame counts and duration are checked, allowing container timestamp
+quantization. Output is atomic/no-clobber after successful trailer writing.
+No PID/thread cap is configured.
+
+Builds require FFmpeg development libraries, pkg-config and libclang; runtime
+requires compatible libavcodec/libavformat/libavutil and libvpx support. Pin the
+OS image and codec versions for reproducible CI. The manifest records linked
+library versions. Same-build byte determinism is tested, not guaranteed across
+codec upgrades or architectures. Distribution must account for linked library
+licenses, including GPL components if present in the system FFmpeg build; this
+repository's source license does not override those terms.
+
+Tests decode the VP9 output of an independently encoded synthetic H.264 fixture,
+check dimensions/timestamps, deterministic bytes, no-overwrite, limits and
+truncation, then run CLI without PATH and bundle/native scene binding. This is a
+working **silent-video profile**, not completion of general video conversion.
+Audio/video muxing, broader color/timing profiles, visual distortion bounds and
+actual Roblox playback/deployment acceptance remain open. `engineVerified` stays
+false: codec/container correctness is not engine acceptance.
