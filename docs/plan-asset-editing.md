@@ -24,10 +24,31 @@ not the source's convertibility. `build bundle` still performs full conversion,
 source checks, policy validation and native assembly. Integration tests actually
 build an edited plan, rather than treating a saved JSON document as build success.
 
-## Transition state
+## CLI
 
-The replacement module is implemented and regression-tested first. The existing
-`assets --catalog` CLI has **not yet migrated** to it; old catalog input is rejected
-by the replacement rather than silently reinterpreted. Next, move the CLI to the
-build plan and delete obsolete catalog/configuration/preview geometry code and
-fixtures. Issue 8 remains open until that migration and naming audit are complete.
+```sh
+roblox assets --plan build.json init
+roblox assets --plan build.json add wall --conversion wall-conversion.json
+roblox assets --plan build.json list
+roblox assets --plan build.json inspect wall
+roblox assets --plan build.json edit wall --conversion replacement.json --expected-revision REVISION
+roblox assets --plan build.json validate
+roblox assets --plan build.json remove wall
+```
+
+The conversion file contains one typed conversion object, for example
+`{"kind":"mesh","source":"wall.glb","config":{"metresPerStud":0.28}}`.
+The conversion-file argument is cwd-relative; paths inside it are plan-relative.
+IDs are explicit caller choices, not random UUIDs. `inspect` returns the declared
+conversion and explicitly reports `sourceValidated: false`.
+
+`validate` performs a real offline bundle build and integrity verification into
+temporary output, then removes that output. Configured incremental caches may
+be populated as during an ordinary build. It does not publish or prove engine
+acceptance. Empty plans are editable but cannot validate as a complete bundle.
+
+The CLI now uses this implementation exclusively. The old `--catalog`, preview
+configuration, geometry decoder and catalog schema have been removed, with no
+fallback or silent reinterpretation. Existing source assets and unrelated files
+are not migrated or deleted automatically. Issue 8 still needs its naming and
+final acceptance audit.

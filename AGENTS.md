@@ -8,8 +8,8 @@
 - Implement format encoders in Rust; other implementations are format references,
   not mandatory subprocess tools. Keep metric conversion and conventions in
   validated JSON. Record independent format evidence and test deterministic bytes.
-- The experimental Studio preview is not the offline build architecture. Retire
-  it as its replacement is validated; do not add new build dependencies on it.
+- Native offline build plans replace the retired preview/catalog design; do not
+  restore a parallel registry or preview geometry path.
 
 - General-purpose, agent-first Roblox CLI. Assets are the first command group,
   not the scope of the whole tool. Do not build speculative command groups.
@@ -18,7 +18,7 @@
   Studio automation is a separate feature, not a conversion/build dependency.
   No Electron or Node companion; any necessary executable remains Rust.
 - CLI commands must return structured results/errors and meaningful exit status.
-  Catalog registration is not a completed import. Never report temporary preview
+  Plan editing is not completed conversion. Never report temporary preview
   geometry as persistent, publishable Roblox assets.
 - Keep project conventions in validated JSON configuration. Do not introduce
   a second source of project settings.

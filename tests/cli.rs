@@ -1,165 +1,147 @@
-use serde_json::Value;
-use std::{path::Path, process::Command};
+use serde_json::{Value, json};
+use std::{fs, path::Path, process::Command};
 
-fn run(path: &Path, args: &[&str], success: bool) -> Value {
-    let output = Command::new(env!("CARGO_BIN_EXE_roblox"))
-        .args(["assets", "--catalog"])
-        .arg(path)
+fn run(plan: &Path, args: &[&str], success: bool) -> Value {
+    let result = Command::new(env!("CARGO_BIN_EXE_roblox"))
+        .env_clear()
+        .args(["assets", "--plan"])
+        .arg(plan)
         .args(args)
         .output()
         .unwrap();
     assert_eq!(
-        output.status.success(),
+        result.status.success(),
         success,
         "{}",
-        String::from_utf8_lossy(&output.stderr)
+        String::from_utf8_lossy(&result.stderr)
     );
     serde_json::from_slice(if success {
-        &output.stdout
+        &result.stdout
     } else {
-        &output.stderr
+        &result.stderr
     })
     .unwrap()
 }
 
-#[test]
-fn complete_cli_lifecycle_preserves_sources_and_identity() {
-    let temporary = tempfile::tempdir().unwrap();
-    let path = temporary.path().join("assets.json");
-    run(
-        &path,
-        &["init", "--config", "examples/building-kit.json"],
-        true,
-    );
-    run(
-        &path,
-        &["init", "--config", "examples/building-kit.json"],
-        false,
-    );
-    let output = run(
-        &path,
-        &["add", "tests/fixtures/doorway.glb", "--id", "door"],
-        true,
-    );
-    assert_eq!(output["studioApplied"], false);
-    let old = run(&path, &["inspect", "door"], true);
-    run(&path, &["edit", "door", "--name", "Entrance"], true);
-    let renamed = run(&path, &["inspect", "door"], true);
-    assert_eq!(renamed["result"]["id"], "door");
-    assert_ne!(
-        renamed["result"]["sourceRevision"],
-        old["result"]["sourceRevision"]
-    );
-    run(
-        &path,
-        &["edit", "door", "--source", "tests/fixtures/glass.glb"],
-        true,
-    );
-    let bytes = std::fs::read(&path).unwrap();
-    run(
-        &path,
-        &["add", "tests/fixtures/doorway.glb", "--id", "door"],
-        false,
-    );
-    run(&path, &["edit", "door", "--source", "missing.glb"], false);
-    assert_eq!(std::fs::read(&path).unwrap(), bytes);
-    assert_eq!(run(&path, &["validate"], true)["result"]["validated"], 1);
-    run(&path, &["remove", "door"], true);
-    assert!(Path::new("tests/fixtures/doorway.glb").exists());
-    assert!(Path::new("tests/fixtures/glass.glb").exists());
-    assert_eq!(
-        run(&path, &["list"], true)["result"]["assets"],
-        serde_json::json!({})
-    );
-    run(&path, &["remove", "door"], false);
+fn setup(root: &Path) -> std::path::PathBuf {
+    image::GrayImage::from_pixel(1, 1, image::Luma([128]))
+        .save(root.join("source.png"))
+        .unwrap();
+    let recipe = root.join("conversion.json");
+    fs::write(
+        &recipe,
+        json!({"kind":"texture","source":"source.png","config":{
+        "operation":"roughness","maxWidth":1,"maxHeight":1,"maxDecodedBytes":4096}})
+        .to_string(),
+    )
+    .unwrap();
+    recipe
 }
 
 #[test]
-fn concurrent_cli_writers_do_not_lose_registrations() {
-    let temporary = tempfile::tempdir().unwrap();
-    let path = temporary.path().join("assets.json");
-    run(
-        &path,
-        &["init", "--config", "examples/building-kit.json"],
-        true,
-    );
-    let handles: Vec<_> = (0..8)
-        .map(|index| {
-            let path = path.clone();
-            std::thread::spawn(move || {
-                run(
-                    &path,
-                    &[
-                        "add",
-                        "tests/fixtures/glass.glb",
-                        "--id",
-                        &format!("glass-{index}"),
-                    ],
-                    true,
-                )
-            })
-        })
-        .collect();
-    for handle in handles {
-        handle.join().unwrap();
-    }
+fn cli_edits_the_real_build_plan_and_validates_native_outputs() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    let plan = root.join("build.json");
+    let recipe = setup(root);
+    let recipe = recipe.to_str().unwrap();
+    let initial = run(&plan, &["init"], true);
+    assert_eq!(initial["scope"], "offlineBuildPlan");
+    run(&plan, &["init"], false);
+    run(&plan, &["add", "paint", "--conversion", recipe], true);
     assert_eq!(
-        run(&path, &["list"], true)["result"]["assets"]
-            .as_object()
+        run(&plan, &["list"], true)["result"]["assets"]
+            .as_array()
             .unwrap()
             .len(),
-        8
+        1
+    );
+    assert_eq!(
+        run(&plan, &["inspect", "paint"], true)["result"]["sourceValidated"],
+        false
+    );
+    run(
+        &plan,
+        &[
+            "edit",
+            "paint",
+            "--conversion",
+            recipe,
+            "--expected-revision",
+            initial["result"]["revision"].as_str().unwrap(),
+        ],
+        false,
+    );
+    run(&plan, &["edit", "paint", "--conversion", recipe], true);
+    let validation = run(&plan, &["validate"], true);
+    assert_eq!(validation["result"]["verification"]["artifactsVerified"], 1);
+    assert_eq!(
+        validation["result"]["verification"]["engineVerified"],
+        false
+    );
+    fs::remove_file(root.join("source.png")).unwrap();
+    run(&plan, &["validate"], false);
+    run(&plan, &["remove", "paint"], true);
+    assert!(root.join("conversion.json").exists());
+}
+
+#[test]
+fn concurrent_cli_writers_preserve_all_plan_entries() {
+    let temp = tempfile::tempdir().unwrap();
+    let plan = temp.path().join("build.json");
+    let recipe = setup(temp.path());
+    run(&plan, &["init"], true);
+    let mut children = Vec::new();
+    for index in 0..6 {
+        children.push(
+            Command::new(env!("CARGO_BIN_EXE_roblox"))
+                .env_clear()
+                .args(["assets", "--plan"])
+                .arg(&plan)
+                .arg("add")
+                .arg(format!("paint-{index}"))
+                .arg("--conversion")
+                .arg(&recipe)
+                .stdout(std::process::Stdio::null())
+                .spawn()
+                .unwrap(),
+        );
+    }
+    for mut child in children {
+        assert!(child.wait().unwrap().success());
+    }
+    assert_eq!(
+        run(&plan, &["list"], true)["result"]["assets"]
+            .as_array()
+            .unwrap()
+            .len(),
+        6
     );
 }
 
 #[test]
-fn unregistered_files_are_not_implicitly_imported_and_missing_sources_can_be_removed() {
-    let temporary = tempfile::tempdir().unwrap();
-    let path = temporary.path().join("assets.json");
-    let source = temporary.path().join("copy.glb");
-    std::fs::copy("tests/fixtures/glass.glb", &source).unwrap();
-    run(
-        &path,
-        &["init", "--config", "examples/building-kit.json"],
-        true,
-    );
-    assert_eq!(run(&path, &["validate"], true)["result"]["validated"], 0);
-    run(
-        &path,
-        &["add", source.to_str().unwrap(), "--id", "copy"],
-        true,
-    );
-    let catalog = roblox_asset_link::catalog::read(&path).unwrap();
-    assert_eq!(catalog.assets["copy"].source, Path::new("copy.glb"));
-    std::fs::remove_file(source).unwrap();
-    run(&path, &["validate"], false);
-    run(&path, &["remove", "copy"], true);
-}
-
-#[test]
-fn capabilities_and_argument_errors_are_machine_readable() {
+fn retired_catalog_and_transport_commands_are_rejected_without_fallback() {
+    for args in [
+        vec!["assets", "--catalog", "old.json", "list"],
+        vec!["serve"],
+        vec!["assets", "list"],
+    ] {
+        let output = Command::new(env!("CARGO_BIN_EXE_roblox"))
+            .env_clear()
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(!output.status.success());
+        assert!(output.stdout.is_empty());
+        let error: Value = serde_json::from_slice(&output.stderr).unwrap();
+        assert_eq!(error["ok"], false);
+    }
     let output = Command::new(env!("CARGO_BIN_EXE_roblox"))
         .arg("capabilities")
         .output()
         .unwrap();
     assert!(output.status.success());
     let value: Value = serde_json::from_slice(&output.stdout).unwrap();
-    assert_eq!(value["result"]["persistentStudioImport"], false);
+    assert_eq!(value["result"]["assetDocument"], "offlineBuildPlan");
     assert!(value["result"].get("serverExecutable").is_none());
-
-    for arguments in [
-        vec!["assets", "list"],
-        vec!["assets", "not-a-command"],
-        vec!["serve"],
-    ] {
-        let output = Command::new(env!("CARGO_BIN_EXE_roblox"))
-            .args(arguments)
-            .output()
-            .unwrap();
-        assert!(!output.status.success());
-        assert!(output.stdout.is_empty());
-        let value: Value = serde_json::from_slice(&output.stderr).unwrap();
-        assert_eq!(value["ok"], false);
-        assert!(value["error"]["message"].as_str().is_some());
-    }
 }

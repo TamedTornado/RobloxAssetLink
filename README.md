@@ -50,18 +50,19 @@ Read each profile's restrictions. Unsupported semantics fail rather than being
 silently dropped or delegated to cloud conversion. Repeatability is tested for
 the pinned toolchain; native codec library upgrades can change output bytes.
 
-## Preview retirement and catalog transition
+## Asset editing and preview retirement
 
 The experimental `roblox-server`, HTTP snapshot protocol and Luau preview plugin
 have been removed from this repository. They are not required to load or inspect
 build inputs, and no preview geometry is a substitute for native build output.
 Removal does not uninstall previously installed files or alter Studio sessions.
 
-The older `roblox assets --catalog …` commands currently remain local GLB catalog
-operations; they do not import, upload or publish assets. Their registration/config
-model is still being migrated away from preview-era assumptions under issue 8.
-The catalog is not an input to `build bundle`; use the documented bundle JSON plan
-for offline builds. Do not treat the unfinished catalog transition as complete.
+`roblox assets --plan build.json` manages entries in the same plan consumed by
+`build bundle`: initialize, add, edit, list, inspect, validate and remove. See
+[asset editing](docs/plan-asset-editing.md) for conversion JSON, revision checks
+and dependency-aware removal. Validation executes a temporary offline build.
+The old GLB catalog, `--catalog` option, preview configuration and geometry decoder
+are removed; old documents are rejected rather than silently reinterpreted.
 
 Repository naming is also tracked under issue 8. Hosted asset upload, ID mapping,
 place relinking and publishing are tracked under issue 9; no automatic publication
