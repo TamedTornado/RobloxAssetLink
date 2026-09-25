@@ -4,6 +4,8 @@ use std::{fs, path::Path};
 
 pub mod catalog;
 pub mod config;
+pub mod convert;
+pub mod mesh;
 use config::{Config, PartSettings};
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;

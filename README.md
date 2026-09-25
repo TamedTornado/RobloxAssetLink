@@ -4,6 +4,22 @@ General-purpose, CLI-first Roblox tooling for agents and scripts. **Assets are
 the first command group, not the boundary of the tool.** This repository retains
 its original name while the implementation moves beyond the GLB-preview design.
 
+## Offline build toolchain
+
+The target is now **local source asset conversion and game assembly**, with no
+Roblox server or Studio dependency during builds. Deployment will be separate.
+See [format inventory and implementation evidence](docs/offline-conversion.md).
+
+First implemented conversion increment (GLB input currently; FBX/glTF/OBJ adapters
+remain tracked work under the general mesh-conversion issue):
+
+```sh
+roblox convert mesh model.glb --config examples/conversion.json --output converted
+```
+
+This emits native mesh files and a manifest, not a preview. It does **not** yet
+produce collision data, a complete game or proven publishable assets.
+
 ## Executables and current scope
 
 - `roblox`: short-lived commands with JSON results, JSON errors on stderr, and

@@ -20,6 +20,11 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
+    /// Convert assets locally. No catalog, Studio, credentials or network.
+    Convert {
+        #[command(subcommand)]
+        command: Convert,
+    },
     /// Report implemented capabilities without requiring Studio or a catalog.
     Capabilities,
     /// Manage explicit asset registrations. These commands do not claim Studio import.
@@ -28,6 +33,18 @@ enum Command {
         catalog: Option<PathBuf>,
         #[command(subcommand)]
         command: Assets,
+    },
+}
+
+#[derive(Subcommand)]
+enum Convert {
+    /// Encode source geometry as native Roblox meshes (currently static GLB).
+    Mesh {
+        source: PathBuf,
+        #[arg(long)]
+        config: PathBuf,
+        #[arg(long)]
+        output: PathBuf,
     },
 }
 
@@ -71,13 +88,27 @@ enum Assets {
 }
 
 fn execute(cli: Cli) -> Result<Value> {
+    if let Command::Convert {
+        command:
+            Convert::Mesh {
+                source,
+                config,
+                output,
+            },
+    } = &cli.command
+    {
+        let config = serde_json::from_slice(&std::fs::read(config)?)?;
+        let manifest = roblox_asset_link::convert::convert(source, output, &config)?;
+        return Ok(json!({"ok":true,"scope":"offlineConversion","result":manifest}));
+    }
     let Command::Assets {
         catalog: path,
         command,
     } = cli.command
     else {
         return Ok(json!({"ok":true,"result":{
-            "commandGroups":["assets"],"assetOperations":["init","add","edit","remove","list","inspect","validate","config"],
+            "commandGroups":["assets","convert"],"assetOperations":["init","add","edit","remove","list","inspect","validate","config"],
+            "offlineConversion":["static-glb-to-mesh-v2"],"offlineGameBuild":false,
             "serverExecutable":"roblox-server","requiresStudioForCatalog":false,
             "persistentStudioImport":false,"studioCommandExecution":false
         }}));

@@ -1,5 +1,16 @@
 # Roblox CLI development
 
+- Primary product: a general-purpose offline Roblox build toolchain, not a
+  LayerOne-specific importer. Conversion, script checks and place assembly must
+  work without Studio, credentials or Roblox servers. Deployment is a separate
+  stage that uploads prebuilt outputs and links remote IDs; never quietly replace
+  local conversion with cloud conversion. Local gameplay is optional future work.
+- Implement format encoders in Rust; other implementations are format references,
+  not mandatory subprocess tools. Keep metric conversion and conventions in
+  validated JSON. Record independent format evidence and test deterministic bytes.
+- The experimental Studio preview is not the offline build architecture. Retire
+  it as its replacement is validated; do not add new build dependencies on it.
+
 - General-purpose, agent-first Roblox CLI. Assets are the first command group,
   not the scope of the whole tool. Do not build speculative command groups.
 - Separate Rust CLI and server executables; Luau Studio adapter only where

@@ -1,0 +1,65 @@
+# Offline conversion implementation
+
+The product is a general-purpose Rust build toolchain. Source-format adapters
+(GLB/glTF, FBX, OBJ and later formats) feed shared geometry and native encoders.
+No project-specific naming rules, Studio, credentials, network or conversion
+subprocess belongs in the build path. Uploading and remote ID linking are a
+separate deployment stage.
+
+## First implemented increment
+
+`roblox convert mesh SOURCE --config CONFIG --output NEW_DIRECTORY`
+
+Currently the source adapter supports self-contained GLB, not FBX, OBJ or external
+glTF buffers yet. The encoder is independent of GLB and accepts typed Rust mesh
+data. The command emits native v2.00 mesh files plus a deterministic manifest.
+JSON configuration requires `metresPerStud`; it has no Studio/plugin settings.
+Output directories must not exist. Source files are never modified.
+
+The static adapter bakes scene transforms into positions, applies inverse
+transpose normals, fixes reflected winding, retains UV0 and records material
+factors in the manifest. This is geometry conversion, not finished scene assembly:
+pivot/hierarchy reconstruction belongs to the place/model issue. Textures,
+skinning, animation, morphs, vertex colors, source tangents, extra vertex channels
+and extensions currently fail explicitly. Native vertex colors and tangents are
+supported by the encoder itself; this adapter emits white colors and zero tangent
+bytes for its untextured profile. It does not claim tangent-space shading support.
+Collision is explicitly reported as not generated. Material factors are metadata,
+not completed Roblox material objects.
+
+## Mesh v2.00 layout
+
+Reference: [rbx_mesh v2 structures](https://github.com/krakow10/rbx_mesh/blob/master/src/mesh/v2.rs),
+MIT OR Apache-2.0. No Python implementation is invoked or copied.
+
+- ASCII signature `version 2.00` followed by LF.
+- Little-endian header: u16 header size 12; u8 vertex stride 40; u8 face stride 12;
+  u32 vertex count; u32 face count.
+- Each vertex: position (3 f32), normal (3 f32), UV (2 f32), packed tangent (4 i8),
+  color (4 u8). The tangent bytes are not a third UV float.
+- Each face: three zero-based u32 indices.
+
+These lengths are protocol constants, not runtime limits. The 32-bit counts are
+checked rather than truncated. Non-finite attributes, zero normals and invalid
+indices fail before emission.
+
+Evidence levels remain separate: exact-layout/unit tests, source conversion tests,
+independent decoder acceptance, engine rendering/physics acceptance and upload
+acceptance. Passing the first two does not establish the latter three. No Studio
+or cloud acceptance has been claimed for these outputs.
+
+## Issue inventory
+
+1. Source formats to native static mesh; first increment above, more adapters open.
+2. Native collision payloads and local cooking.
+3. Skinned mesh, rig and weights.
+4. Animation representations.
+5. Images and materials.
+6. Audio/video profiles.
+7. Place/model assembly, including terrain inventory.
+8. Reproducible bundles, local references and script validation.
+9. Separate deployment of preconverted outputs.
+
+All issues are in this repository. Repository rename is deferred; the executable
+remains `roblox`. Existing experimental preview code is not used by conversion and
+will be retired as replacement capabilities are validated.
