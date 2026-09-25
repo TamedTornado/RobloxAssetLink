@@ -28,7 +28,42 @@ Evidence: installed content includes native MP3 and Ogg Vorbis files;
 audio upload inputs. These are distinct observations, not proof that hosting
 preconverted output will never trigger additional server processing.
 
-Still open: broader source regressions (including FLAC), explicit resampling or
+The checked-in synthetic FLAC fixture is encoded independently by FFmpeg rather
+than our conversion library. Tests decode/transcode it locally, then use a
+separate Vorbis decoder to verify 4410 mono frames at 22050 Hz and waveform MSE
+against its analytic sine wave. Repeated outputs are byte-identical; truncation
+and a 4409-frame policy reject without output. FFmpeg is not a test dependency.
+
+Still open: broader source regressions, explicit resampling or
 downmix policy if needed, video codec/container requirements and conversion,
 native asset binding and deployment acceptance. `engineVerified` remains false.
 Issue 6 is not complete merely because the audio sub-pipeline works.
+
+## Video investigation: concrete local candidates, not upload assumptions
+
+Read-only static inspection used the installed RobloxStudioBeta.exe with SHA-256
+`a0f2e5dfeaacc86a8329f6e41b8082940a64837dca707899a6a7350a0c9a49bf`.
+No Studio process, service or local content tree was modified.
+
+- Function `0x1439f39c0–0x1439f4041` references the diagnostic
+  `VideoFrameSampler::open` at instruction `0x1439f3a2f`; a separate close-codecs
+  function is `0x1439f2be0–0x1439f2dd4`. These identify a Roblox sampler path,
+  not merely a WebRTC class with a similar name.
+- Function `0x1434d7150–0x1434d7e1b` references Roblox RVideo's
+  `WebmInputFormat::open` diagnostic at `0x1434d71bd`. RTTI independently names
+  `WebmInputFormat` in `RBX::RVideo`. Format registration is identifiable at
+  `0x1434b57f0–0x1434b586c` through `rvformat_register_all`.
+- RVideo-specific codec diagnostics identify VPX software encode/decode and
+  Opus/Vorbis implementations; WebM codec identifiers V_VP8, V_VP9, A_OPUS and
+  A_VORBIS occur in the executable. These are candidates for further call-path
+  inspection, **not proof that every combination is accepted by VideoFrame**.
+- The bundled Studio UI file `StudioContent/textures/R15Migrator/start-page-anim.mp4`
+  independently probes as H.264 High, YUV420P, 350×200, 20 fps, 320 frames,
+  16 seconds. This proves a local UI asset exists, not that the game player
+  accepts that profile; Studio UI and engine consumers must not be conflated.
+
+The next video implementation decision must distinguish the Roblox sampler's
+actual format/codec dispatch from Studio UI playback and from generic WebRTC.
+WebM/VPX is a concrete candidate now, but a reader/dispatch trace and known-good
+consumer sample are still needed before claiming a native target profile.
+No video conversion command is advertised as working yet.
