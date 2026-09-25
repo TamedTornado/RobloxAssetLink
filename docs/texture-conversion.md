@@ -191,6 +191,41 @@ semantics, accepted content-reference forms, target-specific texture processing
 and native acceptance still need verification before shipping a writer. No
 unknown enum meanings or image-compression steps have been guessed into code.
 
+### SurfaceAppearance-specific descriptor path
+
+Further read-only tracing of the same executable narrows the descriptor contract:
+
+- The v2 parser accepts unsigned `usage` values 0–4 (`0x1473138ec`), alpha-mode
+  values 0–3 (`0x147313973`), and tiling values 0–2 (`0x1473139c6`); larger values
+  branch to failure. These are protocol bounds, not project resource policy.
+- The writer conditionally emits a `version` attribute on `usage`, using a table
+  at `0x14c3dded0`. The first five entries are 0, 0, 0, 1, 0. This version is
+  separate from the outer `texturepack_version` value of 2. A generic writer
+  cannot treat every usage as having identical semantics.
+- `0x1441630e0` constructs descriptor data via `0x143939ce0`, passing a zero
+  usage-version selector at `0x144163123`. It then calls the XML serialization
+  wrapper at `0x144163282` when the alternate checked-serialization feature is
+  disabled; the other path calls `0x147314900`.
+- Inside `0x143939ce0`, the type test calls the independently identified
+  SurfaceAppearance class descriptor `0x140f6d110` at `0x143939d75`.
+  Its SurfaceAppearance branch copies the four base map content references and
+  the emissive reference, sets usage to **0** (`0x14393a096`), copies instance
+  field `0x208` to the descriptor alpha field, and sets tiling to **0**
+  (`0x14393a0a3`). This is stronger evidence for a SurfaceAppearance profile than
+  choosing enum values because the parser happens to accept them. The alpha
+  field's public-property mapping still needs to be checked before integration.
+- The named UGC validation callback `0x14408a7a0` calls this same v2 parser at
+  `0x14408a955`. It compares the parsed base/emissive content references against
+  SurfaceAppearance getters (`0x14408a9da–0x14408aa50`) and requires no layers.
+  This establishes an actual SurfaceAppearance descriptor consumer, but does not
+  prove rendering of locally generated descriptors or byte-preserving upload.
+
+The implementation path is now a specific unlayered SurfaceAppearance descriptor,
+not a speculative all-usage TexturePack encoder. Remaining integration checks
+are the channel content-element syntax, public alpha-property mapping, local URI
+handling and native property serialization. No process was launched or modified
+to obtain this evidence; no engine acceptance is claimed.
+
 ## PC native texture inventory and mip chains
 
 Read-only inspection of the same installed version's `PlatformContent` found
