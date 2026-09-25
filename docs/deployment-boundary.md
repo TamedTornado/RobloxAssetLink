@@ -5,7 +5,10 @@ through [`deploy link-scene`](deployment-linking.md). Offline conversion/build m
 without credentials, Studio or Roblox servers. A local output is not automatically
 an admissible upload. [Live acceptance experiments](cloud-acceptance-2026-09-25.md)
 now establish six native artifact types working after upload, with explicit
-remaining failures and gaps. No game has been published.
+remaining failures and gaps. A native place has now been published, downloaded
+byte-for-byte, and visually verified in actual Studio client play mode with
+working color, normal, roughness and metalness maps. See the report's version-8
+PBR proof and `tests/fixtures/pbr-runtime/`.
 
 ## Published interface gaps
 
@@ -17,7 +20,7 @@ Checked September 25, 2026 against Roblox's
 | Native `.mesh` | Our independently encoded v2 and v4.01 files were accepted and loaded through typed MeshParts in Studio. Byte-preserving remote storage is not established. |
 | PNG | Accepted and successfully preloaded in an ImageLabel. This does not prove unchanged runtime bytes or no further server processing. |
 | DDS | Studio loads our BC4, L8 and RGBA8 outputs. The Image upload endpoint rejects BC4 with InvalidImage and the uncompressed controls with Unsupported image format. Engine readability and upload admission are different boundaries. |
-| TexturePack XML | Accepted and approved using asset type TexturePack, despite omission from the guide's limited table. Remote-linked pack rendering remains unverified. |
+| TexturePack XML | Accepted as TexturePack and now visibly verified in actual client play mode. Upload individual PNG maps, publish their descriptor, link its ID and allow asynchronous runtime representation generation. Native place upload alone did not generate a pack from the individual map properties. |
 | Ogg Vorbis | Accepted, decoded and reported the expected duration in Studio; byte-preserving deployment is not established. |
 | VP9/Vorbis WebM | The zero-price VP9 WebM probe was blocked by HTTP 403 requiring account ID verification, before format admission. The guide lists MP4/MOV; substituting source MP4 would abandon the preconverted-output boundary. |
 | RBXM models/animations | Our generated model and KeyframeSequence were accepted and loaded with checked hierarchy/dimensions and keyframe/pose data. |
@@ -52,7 +55,9 @@ touching LayerOne or unrelated projects. That authorization does not prove that
 unsupported native formats have a working endpoint. Authentication must use the
 test destination's authorized mechanism, not unrelated credentials.
 
-The destination still needs to be created. Local typed scene mapping/relinking and
-its unit/integration tests are implemented; authenticated upload receipts,
-dependency publication and live API-contract acceptance remain work to do. Issue 9 stays
-open; the overall goal is not complete or marked blocked by this audit.
+The private destination is universe 10767994924, place 99388199272385. Local typed
+scene mapping/relinking and its unit/integration tests are implemented. Live
+publication and PBR rendering are proven, but product CLI authenticated upload
+receipts, dependency upload ordering/readiness and publication remain to implement.
+Video upload is out of scope; PNG upload with Roblox-side compression replaces
+DDS upload as the accepted deployment path. Issue 9 stays open for CLI work.

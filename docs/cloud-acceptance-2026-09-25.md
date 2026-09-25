@@ -8,6 +8,51 @@ see [the focused investigation](dds-import-upload-investigation.md).
 
 ## Current publishing outcome
 
+### Resolved: published PBR visibly works in actual play mode
+
+The earlier thumbnail-only uncertainty below is superseded by a direct client
+play-mode comparison using downloaded **published version 8**. The image
+[published runtime proof](images/pbr-published-runtime-proof.png) shows distinct
+normal-map shading, roughness highlights and metallic reflections on five
+identical tangent-equipped spheres. Jason independently observed the earlier
+editor comparison; the final runtime screenshot is the publication evidence.
+
+Three fixture defects obscured this result: the initial OBJ tetrahedron had no
+tangents; thumbnails did not discriminate the PBR maps; and the player's automatic
+graphics quality suppressed PBR detail even with high editor RenderSettings.
+Manual player quality level 10 exposes the expected differences. The previous
+graphics preferences were retained for restoration after the test.
+
+Uploading PNGs and placing their individual map references is **not sufficient**
+for this native place-upload route. That control rendered gray in play mode.
+The successful deployment uploaded the maps, uploaded a small TexturePack XML
+descriptor referencing those map IDs, linked its pack ID into SurfaceAppearance,
+and published the already-built place. Roblox generated runtime representations;
+an initial engine response said those were still being generated. This is
+asynchronous readiness after approval, not a local DDS encoding requirement.
+Studio validated rendering; it did not author, convert or publish this fixture.
+
+The exact place bytes before and after publication have SHA-256
+`8ff5657eb6ce1637ac31a5c5ec3bb805b298139df21286e76ae305c6d3ee2edf`.
+Temporary scripts change only camera/labels and run a deadline; they do not set
+material maps or repair the scene. Current Realistic lighting and Studio's normal
+migration metadata eliminate the Compatibility Lighting migration prompt.
+Fixtures and reproduction details are under `tests/fixtures/pbr-runtime/`.
+
+A modern TexturePackContent serialization control also rendered correctly, but
+the final accepted version uses the existing serializer's TexturePack ContentId.
+Studio's local SerializationService roundtrip retains the same pack IDs and maps,
+so no speculative serializer migration is warranted. CLI upload/publication
+implementation remains unfinished in issue 9; this resolves its PBR acceptance.
+
+An optional native CreateAssetAsync control was unavailable in this Studio build.
+Its initial launch was blocked for omitting a zero-price safeguard. Inspection
+confirmed the native ExpectedPrice parameter; a corrected zero-price invocation
+returned "not available yet" without creating an asset. No feature flag was
+enabled to force it. Redundant publication attempts returned HTTP 409/server busy;
+the final proof uses successfully published and downloaded version 8, not a failed
+request.
+
 ### Four individual maps, no authored TexturePack
 
 Following Jason's direction, the next test uploaded four original 64-by-64 PNGs
