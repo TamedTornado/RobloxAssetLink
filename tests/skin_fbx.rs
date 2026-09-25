@@ -144,7 +144,16 @@ fn external_fbx_skin_preserves_clusters_and_deterministic_native_geometry() {
     let directory = tempfile::tempdir().unwrap();
     let output = directory.path().join("native");
     let manifest = skin_import::convert(&source, &output, &policy).unwrap();
-    assert_eq!(manifest.rig.len(), mesh.skin_deformers[0].clusters.len());
+    assert!(manifest.rig.len() >= mesh.skin_deformers[0].clusters.len());
+    for cluster in &mesh.skin_deformers[0].clusters {
+        let bone = cluster.bone_node.as_ref().unwrap();
+        assert!(
+            manifest
+                .rig
+                .iter()
+                .any(|binding| binding.source_node == bone.element.typed_id as usize)
+        );
+    }
     assert!(!manifest.meshes.is_empty());
     for entry in &manifest.meshes {
         let bytes = fs::read(output.join(&entry.file)).unwrap();

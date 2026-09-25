@@ -32,6 +32,7 @@ pub struct Manifest {
     pub config: Config,
     pub rig: Rig,
     pub rig_sha256: String,
+    pub bind_rig_sha256: Option<String>,
 }
 
 struct Joint {
@@ -357,7 +358,25 @@ pub fn read(source: &Path, config: &Config) -> Result<(Clip, Rig)> {
 }
 
 pub fn convert(source: &Path, output: &Path, config: Config) -> Result<Manifest> {
-    let (clip, rig) = read(source, &config)?;
+    convert_with_bind_pose(source, output, config, None)
+}
+
+pub(crate) fn convert_with_bind_pose(
+    source: &Path,
+    output: &Path,
+    config: Config,
+    target: Option<&crate::skin_import::Manifest>,
+) -> Result<Manifest> {
+    let (mut clip, mut rig) = read(source, &config)?;
+    if let Some(target) = target {
+        crate::animation_rebase::apply(
+            &mut clip,
+            &mut rig,
+            target,
+            config.metres_per_stud,
+            config.rigid_tolerance,
+        )?;
+    }
     let rig_sha256 = rig.sha256()?;
     let artifact = animation::write_clip(&fs::read(source)?, &clip, output)?;
     Ok(Manifest {
@@ -365,5 +384,6 @@ pub fn convert(source: &Path, output: &Path, config: Config) -> Result<Manifest>
         config,
         rig,
         rig_sha256,
+        bind_rig_sha256: target.map(|skin| skin.rig_sha256.clone()),
     })
 }

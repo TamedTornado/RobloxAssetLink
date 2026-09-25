@@ -166,4 +166,33 @@ fn fbx_rig_metadata_reaches_scene_validation_and_wrong_reparenting_fails() {
         .to_string();
     assert!(error.contains("hierarchy mismatch"), "{error}");
     assert!(!out.exists());
+
+    let mesh_node = parsed
+        .nodes
+        .iter()
+        .find(|node| {
+            node.mesh
+                .as_ref()
+                .is_some_and(|mesh| !mesh.skin_deformers.is_empty())
+        })
+        .unwrap()
+        .element
+        .typed_id as usize;
+    let skin_config = roblox_asset_link::skin_import::Config {
+        mesh_node,
+        metres_per_stud: 0.28,
+        cull_distance_metres: 30.,
+        rigid_tolerance: 0.0001,
+    };
+    let skin =
+        roblox_asset_link::skin_import::convert(source, &root.join("skin-reference"), &skin_config)
+            .unwrap();
+    let mut bound_plan = plan.clone();
+    bound_plan["assets"][0]["conversion"]["bindTo"] = "skin".into();
+    bound_plan["assets"].as_array_mut().unwrap().push(json!({"id":"skin","conversion":{"kind":"skin","source":"source.fbx","config":skin_config}}));
+    let bound_scene = json!({"kind":"model","animationBindings":[{"animation":{"asset":"motion","file":"animation.rbxm"},"root":"mesh","bone":joint.name,"rigidTolerance":0.0001}],
+        "roots":[{"id":"mesh","class":"MeshPart","name":"Mesh","properties":{},"references":{},"children":[],"assets":{"MeshContent":{"asset":"skin","file":skin.meshes[0].file}},"rig":{"asset":"skin","file":"rig.rbxm"}}]});
+    fs::write(root.join("build.json"), bound_plan.to_string()).unwrap();
+    fs::write(root.join("scene.json"), bound_scene.to_string()).unwrap();
+    bundle::build(&root.join("build.json"), &root.join("bound-fbx")).unwrap();
 }

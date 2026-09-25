@@ -78,10 +78,11 @@ Bundle assembly supports explicit mesh/collision/texture bindings and native
 material attachment; see [offline bundles](offline-bundles.md). It does not yet
 automatically turn a geometry conversion manifest into properly sized/pivoted
 MeshParts. Native Bone creation/attachment is implemented through the `rig` asset
-reference, but rebasing source-rest animation onto a different skin bind pose is
-not implemented. The independent Khronos fixture demonstrates that these rests
-can differ: the integrated build rejects it rather than silently distorting its
-motion. Terrain payload generation is now
+reference. Explicit `bindTo` conversion can rebase source-rest animation onto the
+skin bind pose while preserving motion; see [animation rebasing](animation-format.md#explicit-skin-bind-pose-rebasing).
+The independent Khronos fixture demonstrates that these rests can differ: the
+unbound pairing still fails while the explicitly rebased pairing passes without
+weakening scene validation. Terrain payload generation is now
 tracked separately in issue 10; preservation of supplied native terrain data is
 tested. Plain instance serialization does not prove the remaining integration
 work complete. No remote asset ids are generated here

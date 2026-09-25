@@ -6,6 +6,16 @@ bundles include the artifact and its hash. Both glTF and FBX producers share thi
 writer. Parent indices must precede children and names must be nonempty/unique.
 This is bind-pose output, not an animation rest-pose guess.
 
+FBX deformer clusters can omit unweighted descendant/end joints. Those Bone
+descendants are now retained after the weighted entries, preserving their source
+local rest relative to the parent's bind frame. Their native bind world frame is
+that parent bind multiplied by the source local rest. They receive no invented
+vertex influences, and existing weighted indices remain unchanged. The Maya
+fixture's `joint4` exposed this gap: its four-joint animation previously met a
+three-joint skin rig. The complete hierarchy now passes explicit binding. Existing
+unsupported intermediate non-cluster ancestor cases still fail rather than being
+silently flattened.
+
 Scene MeshParts can attach this artifact with `rig` referencing the same logical
 skin asset as their explicit `MeshContent` binding. Existing explicit Bone roots,
 other parent classes, cross-asset rigs and using the rig file as geometry fail.

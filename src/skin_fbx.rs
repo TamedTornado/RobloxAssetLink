@@ -143,6 +143,7 @@ pub(crate) fn convert(source: &Path, output: &Path, config: &Config) -> Result<M
     let mut remap = BTreeMap::new();
     let mut bones = Vec::new();
     let mut rig = Vec::new();
+    let mut ordered_world = Vec::new();
     while bones.len() < deformer.clusters.len() {
         let previous = bones.len();
         for (index, cluster) in deformer.clusters.iter().enumerate() {
@@ -159,6 +160,7 @@ pub(crate) fn convert(source: &Path, output: &Path, config: &Config) -> Result<M
                 bind_world[parent].inverse() * bind_world[index]
             });
             remap.insert(index, u16::try_from(bones.len())?);
+            ordered_world.push(bind_world[index]);
             bones.push(skin::Bone {
                 name: name.clone(),
                 parent,
@@ -175,6 +177,55 @@ pub(crate) fn convert(source: &Path, output: &Path, config: &Config) -> Result<M
         }
         if previous == bones.len() {
             return Err("FBX skin hierarchy cannot be ordered".into());
+        }
+    }
+    // Deformer clusters omit non-weighted descendants such as end joints. Keep
+    // those Bones too: their source local rest is relative to the parent's bind
+    // frame, and no mesh envelope references these additional entries.
+    let mut node_to_output: BTreeMap<_, _> = rig
+        .iter()
+        .enumerate()
+        .map(|(index, bone)| (bone.source_node, index))
+        .collect();
+    loop {
+        let previous = rig.len();
+        for node in &scene.nodes {
+            let id = node.element.typed_id as usize;
+            if node.bone.is_none() || node_to_output.contains_key(&id) {
+                continue;
+            }
+            let Some(parent) = node
+                .parent
+                .as_ref()
+                .and_then(|parent| node_to_output.get(&(parent.element.typed_id as usize)))
+                .copied()
+            else {
+                continue;
+            };
+            let local = matrix(&ufbx::transform_to_matrix(&node.local_transform));
+            let world = ordered_world[parent] * local;
+            let local_bind = skin_import::cframe(local, config)?;
+            let world_bind = skin_import::cframe(world, config)?;
+            let name = node.element.name.to_string();
+            let parent = Some(u16::try_from(parent)?);
+            node_to_output.insert(id, rig.len());
+            ordered_world.push(world);
+            bones.push(skin::Bone {
+                name: name.clone(),
+                parent,
+                bind_cframe: world_bind,
+                cull_distance: config.cull_distance_metres / config.metres_per_stud,
+            });
+            rig.push(Binding {
+                source_node: id,
+                name,
+                parent,
+                world_bind_cframe: world_bind,
+                local_bind_cframe: local_bind,
+            });
+        }
+        if rig.len() == previous {
+            break;
         }
     }
     let geometry_config = crate::convert::Config {

@@ -34,6 +34,7 @@ pub struct Manifest {
     pub config: Config,
     pub rig: Rig,
     pub rig_sha256: String,
+    pub bind_rig_sha256: Option<String>,
     pub source_time_begin: f64,
     pub sampled_approximation: bool,
     pub unchanged_properties: Vec<String>,
@@ -309,6 +310,15 @@ fn pose(
 }
 
 pub fn convert(source: &Path, output: &Path, config: Config) -> Result<Manifest> {
+    convert_with_bind_pose(source, output, config, None)
+}
+
+pub(crate) fn convert_with_bind_pose(
+    source: &Path,
+    output: &Path,
+    config: Config,
+    target: Option<&crate::skin_import::Manifest>,
+) -> Result<Manifest> {
     crate::rigid::validate(Mat4::IDENTITY, config.rigid_tolerance)?;
     if !config.metres_per_stud.is_finite()
         || config.metres_per_stud <= 0.
@@ -429,19 +439,30 @@ pub fn convert(source: &Path, output: &Path, config: Config) -> Result<Manifest>
         root_parent_cframe: cframe(root_parent),
         joints: rig,
     };
-    let rig_sha256 = rig.sha256()?;
-    let clip = Clip {
+    let mut rig = rig;
+    let mut clip = Clip {
         name: config.name.clone(),
         looped: config.looped,
         priority: config.priority.clone(),
         frames,
     };
+    if let Some(target) = target {
+        crate::animation_rebase::apply(
+            &mut clip,
+            &mut rig,
+            target,
+            config.metres_per_stud,
+            config.rigid_tolerance,
+        )?;
+    }
+    let rig_sha256 = rig.sha256()?;
     let artifact = animation::write_clip(&bytes, &clip, output)?;
     Ok(Manifest {
         artifact,
         config,
         rig,
         rig_sha256,
+        bind_rig_sha256: target.map(|skin| skin.rig_sha256.clone()),
         source_time_begin: baked.playback_time_begin,
         sampled_approximation: true,
         unchanged_properties,

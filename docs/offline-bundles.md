@@ -8,6 +8,11 @@ and `scenes` lists, each with explicit logical ids. Asset conversions select
 KeyframeSequence. `animationGltf` imports the explicit rigid LINEAR glTF/GLB
 profile described in [animation conversion](animation-format.md).
 `animationFbx` uses the same native clip output with explicit FBX baking settings.
+Either source-animation conversion can set `bindTo` to a skin asset id. The
+builder resolves that dependency independent of list order, then performs the
+motion-preserving [rest-basis conversion](animation-format.md#explicit-skin-bind-pose-rebasing).
+It requires a real skin conversion with matching units and hierarchy; unknown
+targets or wrong conversion types fail before publishing a bundle.
 `skin` imports rigid-bind GLB/glTF and linear FBX skins into native v4.01 meshes and keeps
 the source-node/bind hierarchy in its conversion manifest.
 Scene sources use the existing typed scene format and compiler gate.

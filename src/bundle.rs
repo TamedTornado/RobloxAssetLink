@@ -3,7 +3,7 @@ use crate::{Result, scene};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{
-    collections::HashSet,
+    collections::{BTreeSet, HashMap, HashSet},
     fs,
     path::{Path, PathBuf},
 };
@@ -23,7 +23,12 @@ pub struct Asset {
 }
 
 #[derive(Deserialize)]
-#[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase",
+    deny_unknown_fields
+)]
 pub enum Conversion {
     MediaSource {
         source: PathBuf,
@@ -46,6 +51,7 @@ pub enum Conversion {
     AnimationFbx {
         source: PathBuf,
         config: crate::animation_fbx::Config,
+        bind_to: Option<String>,
     },
     Skin {
         source: PathBuf,
@@ -54,6 +60,7 @@ pub enum Conversion {
     AnimationGltf {
         source: PathBuf,
         config: crate::animation_gltf::Config,
+        bind_to: Option<String>,
     },
     Animation {
         source: PathBuf,
@@ -125,12 +132,65 @@ fn key(id: &str) -> String {
     format!("{:x}", Sha256::digest(id.as_bytes()))
 }
 
+fn bind_target(asset: &Asset) -> Option<&str> {
+    match &asset.conversion {
+        Conversion::AnimationGltf { bind_to, .. } | Conversion::AnimationFbx { bind_to, .. } => {
+            bind_to.as_deref()
+        }
+        _ => None,
+    }
+}
+
+fn ordered_assets(plan: &Plan) -> Result<Vec<&Asset>> {
+    let indices: HashMap<_, _> = plan
+        .assets
+        .iter()
+        .enumerate()
+        .map(|(index, asset)| (asset.id.as_str(), index))
+        .collect();
+    let mut dependents = vec![Vec::new(); plan.assets.len()];
+    let mut waiting = vec![0; plan.assets.len()];
+    for (index, asset) in plan.assets.iter().enumerate() {
+        if let Some(target) = bind_target(asset) {
+            let parent = *indices
+                .get(target)
+                .ok_or_else(|| format!("unknown animation bindTo asset: {target}"))?;
+            if !matches!(plan.assets[parent].conversion, Conversion::Skin { .. }) {
+                return Err("animation bindTo requires a skin conversion asset".into());
+            }
+            dependents[parent].push(index);
+            waiting[index] += 1;
+        }
+    }
+    let mut ready: BTreeSet<_> = waiting
+        .iter()
+        .enumerate()
+        .filter_map(|(index, n)| (*n == 0).then_some(index))
+        .collect();
+    let mut result = Vec::new();
+    while let Some(index) = ready.pop_first() {
+        result.push(&plan.assets[index]);
+        for child in &dependents[index] {
+            waiting[*child] -= 1;
+            if waiting[*child] == 0 {
+                ready.insert(*child);
+            }
+        }
+    }
+    if result.len() != plan.assets.len() {
+        return Err("asset conversion dependency cycle".into());
+    }
+    Ok(result)
+}
+
 fn build_asset(
     root: &Path,
     output: &Path,
     asset: &Asset,
     uri_prefix: &str,
     rig: &mut Option<crate::animation::Rig>,
+    target: Option<&crate::skin_import::Manifest>,
+    skin: &mut Option<crate::skin_import::Manifest>,
 ) -> Result<Vec<String>> {
     match &asset.conversion {
         Conversion::MediaSource { source, config } => {
@@ -184,12 +244,13 @@ fn build_asset(
             files.extend(manifest.maps.into_values().map(|map| map.file));
             Ok(files)
         }
-        Conversion::AnimationFbx { source, config } => {
+        Conversion::AnimationFbx { source, config, .. } => {
             fs::create_dir(output)?;
-            let manifest = crate::animation_fbx::convert(
+            let manifest = crate::animation_fbx::convert_with_bind_pose(
                 &local(root, source)?,
                 &output.join("animation.rbxm"),
                 config.clone(),
+                target,
             )?;
             fs::write(
                 output.join("manifest.json"),
@@ -200,16 +261,22 @@ fn build_asset(
         }
         Conversion::Skin { source, config } => {
             let manifest = crate::skin_import::convert(&local(root, source)?, output, config)?;
-            let mut files: Vec<_> = manifest.meshes.into_iter().map(|mesh| mesh.file).collect();
+            let mut files: Vec<_> = manifest
+                .meshes
+                .iter()
+                .map(|mesh| mesh.file.clone())
+                .collect();
             files.push("rig.rbxm".into());
+            *skin = Some(manifest);
             Ok(files)
         }
-        Conversion::AnimationGltf { source, config } => {
+        Conversion::AnimationGltf { source, config, .. } => {
             fs::create_dir(output)?;
-            let manifest = crate::animation_gltf::convert(
+            let manifest = crate::animation_gltf::convert_with_bind_pose(
                 &local(root, source)?,
                 &output.join("animation.rbxm"),
                 config.clone(),
+                target,
             )?;
             fs::write(
                 output.join("manifest.json"),
@@ -295,22 +362,33 @@ pub fn build(source: &Path, output: &Path) -> Result<Manifest> {
     if plan.assets.is_empty() && plan.scenes.is_empty() {
         return Err("empty build plan".into());
     }
+    let ordered = ordered_assets(&plan)?;
     fs::create_dir(output)?;
     let result = (|| -> Result<Manifest> {
         fs::create_dir(output.join("assets"))?;
         fs::create_dir(output.join("scenes"))?;
         let mut bindings = scene::AssetMap::new();
         let mut files = Vec::new();
-        for asset in &plan.assets {
+        let mut skins = HashMap::new();
+        for asset in ordered {
             let directory = format!("assets/{}", key(&asset.id));
             let mut rig = None;
+            let mut skin = None;
+            let target = bind_target(asset)
+                .map(|id| skins.get(id).ok_or("skin dependency was not converted"))
+                .transpose()?;
             let generated = build_asset(
                 root,
                 &output.join(&directory),
                 asset,
                 &format!("rbxasset://{directory}/"),
                 &mut rig,
+                target,
+                &mut skin,
             )?;
+            if let Some(skin) = skin {
+                skins.insert(asset.id.clone(), skin);
+            }
             for file in generated {
                 let path = format!("{directory}/{file}");
                 let local_uri = format!("rbxasset://{path}");

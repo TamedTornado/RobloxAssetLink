@@ -5,6 +5,7 @@ use std::{fs, path::Path};
 pub mod animation;
 pub mod animation_fbx;
 pub mod animation_gltf;
+mod animation_rebase;
 pub mod audio;
 pub mod bundle;
 pub mod catalog;

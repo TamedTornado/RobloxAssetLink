@@ -4,6 +4,34 @@ Source-imported clips now participate in explicit target-rig validation during
 scene assembly; see [animation target compatibility](scene-assembly.md#animation-target-compatibility).
 This checks real Bone rest transforms and hierarchy, not just a metadata hash.
 
+## Explicit skin bind-pose rebasing
+
+In a bundle, `animationGltf` and `animationFbx` conversions may specify
+`bindTo: "skin-asset-id"` alongside their source/config. This is a dependency on
+an actual skin conversion result, not an external file or guessed rest pose.
+The builder orders conversions from this dependency data even if the animation
+appears first. Unknown/non-skin targets fail; no missing dependency falls back
+to unbound conversion. Units, joint names and hierarchy must match.
+
+For source local rest S, target bind B and original pose P, the new pose is
+`inverse(B) * S * P`. The source root's static parent transform is included in
+root S once. Thus `B * newPose == S * P`, preserving sampled joint motion while
+changing its rest basis. New rig metadata uses the target bind transforms and
+identity root-parent context. `bindRigSha256` records the target's native Bone
+artifact hash. This is not anatomical/proportional retargeting across characters.
+
+Rebasing requires complete, full-weight sampled poses and valid rigid transforms;
+inconsistent local/world binds, missing joints, changed parents and partial
+pose semantics fail rather than being guessed. Without explicit `bindTo`, clips
+retain source rest space and the scene's strict compatibility check still applies.
+
+The previously rejected independent Khronos skin/animation pair now builds with
+explicit rebasing. Tests reconstruct world transforms from the final native Bones
+and native Poses for every source frame and compare with the source animation.
+An analytic test uses noncommuting rotations to check matrix order. FBX binding,
+out-of-order dependencies, invalid targets/units and failure cleanup are covered.
+These remain native-data/math tests, not a claim of engine playback acceptance.
+
 `animation::encode` serializes a canonical clip to native RBXM containing a
 KeyframeSequence, timed Keyframes, hierarchical Poses and event markers. Loop,
 priority, blend weights, easing settings, names and transforms are explicit data.
