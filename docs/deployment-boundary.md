@@ -1,6 +1,7 @@
 # Preconverted-asset deployment — issue 9
 
-Deployment is not implemented yet. Offline conversion/build must remain usable
+Cloud upload/publication is not implemented yet. Local scene linking is available
+through [`deploy link-scene`](deployment-linking.md). Offline conversion/build must remain usable
 without credentials, Studio or Roblox servers. A local output is not automatically
 an admissible upload. Nothing has been uploaded or published during this audit.
 
@@ -48,6 +49,7 @@ touching LayerOne or unrelated projects. That authorization does not prove that
 unsupported native formats have a working endpoint. Authentication must use the
 test destination's authorized mechanism, not unrelated credentials.
 
-The destination still needs to be created; local implementation of mapping,
-relinking and API-contract tests also remains work to do. Issue 9 stays
+The destination still needs to be created. Local typed scene mapping/relinking and
+its unit/integration tests are implemented; authenticated upload receipts,
+dependency publication and live API-contract acceptance remain work to do. Issue 9 stays
 open; the overall goal is not complete or marked blocked by this audit.

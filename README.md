@@ -18,6 +18,11 @@ target/release/roblox build bundle build.json --output game-bundle
 target/release/roblox verify-bundle game-bundle
 ```
 
+Deployment remains separate from offline builds. The credential-free
+[`deploy link-scene` command](docs/deployment-linking.md) resolves prebuilt native
+scene references to explicit, hash-pinned remote-ID mappings. It does not upload,
+publish, or claim those caller-supplied IDs have been verified remotely.
+
 The executable is `roblox`. Commands return structured JSON, with JSON errors on
 stderr and nonzero failure exits. New output directories must not already exist.
 Bundle verification checks declared hashes and local native/TexturePack references;
@@ -26,8 +31,9 @@ it is neither authenticity verification nor an engine-acceptance test.
 ## Conversion and assembly
 
 - [Static meshes](docs/offline-conversion.md): GLB/glTF, FBX and OBJ to native mesh
-  files; optional [collision cooking](docs/collision-format.md). Native collision
-  consumer acceptance is still unverified.
+  files; optional [collision cooking](docs/collision-format.md), with a
+  [native engine acceptance fixture](docs/engine-collision-acceptance.md) covering
+  box/hull/decomposition, raycasts, mass, center of mass and inertia.
 - [Skinned meshes](docs/skinned-mesh-format.md): rigid-bind GLB/glTF and supported
   linear FBX rigs, native bone hierarchy and metric transforms.
 - [Animation](docs/animation-format.md): canonical clips, rigid linear glTF clips

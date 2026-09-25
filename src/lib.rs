@@ -11,6 +11,7 @@ pub mod bundle_verify;
 pub mod collision;
 mod collision_format;
 pub mod convert;
+pub mod deployment;
 pub mod material;
 pub mod material_gltf;
 pub mod media_mux;

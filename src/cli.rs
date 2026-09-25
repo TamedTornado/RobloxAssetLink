@@ -16,6 +16,11 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
+    /// Prepare deployment outputs separately from offline conversion/build.
+    Deploy {
+        #[command(subcommand)]
+        command: Deploy,
+    },
     /// Verify a local bundle's declared runtime hashes and native references.
     VerifyBundle { directory: PathBuf },
     /// Compile Luau locally without executing source.
@@ -44,6 +49,20 @@ enum Command {
         plan: Option<PathBuf>,
         #[command(subcommand)]
         command: asset_commands::Command,
+    },
+}
+
+#[derive(Subcommand)]
+enum Deploy {
+    /// Link typed native scene references to caller-supplied remote IDs. No upload.
+    LinkScene {
+        directory: PathBuf,
+        #[arg(long)]
+        scene: String,
+        #[arg(long)]
+        mapping: PathBuf,
+        #[arg(long)]
+        output: PathBuf,
     },
 }
 
@@ -362,13 +381,28 @@ fn execute(cli: Cli) -> Result<Value> {
         let result = roblox_asset_link::bundle_verify::verify(directory)?;
         return Ok(json!({"ok":true,"scope":"offlineBundleVerification","result":result}));
     }
+    if let Command::Deploy {
+        command:
+            Deploy::LinkScene {
+                directory,
+                scene,
+                mapping,
+                output,
+            },
+    } = &cli.command
+    {
+        let mapping = serde_json::from_slice(&std::fs::read(mapping)?)?;
+        let result = roblox_asset_link::deployment::link_scene(directory, scene, &mapping, output)?;
+        return Ok(json!({"ok":true,"scope":"localDeploymentLinking","result":result}));
+    }
     let Command::Assets {
         plan: path,
         command,
     } = cli.command
     else {
         return Ok(json!({"ok":true,"result":{
-            "commandGroups":["assets","convert","build","compile"],"assetOperations":["init","add","edit","remove","list","inspect","validate"],
+            "commandGroups":["assets","convert","build","compile","deploy"],"assetOperations":["init","add","edit","remove","list","inspect","validate"],
+            "deploymentOperations":["link-scene"],"cloudUpload":false,
             "assetDocument":"offlineBuildPlan",
             "localLuauCompilation":true,
             "offlineSceneSerialization":true,
