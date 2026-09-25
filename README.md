@@ -17,8 +17,10 @@ coverage remains tracked under the format issues:
 roblox convert mesh model.glb --config examples/conversion.json --output converted
 ```
 
-This emits native mesh files and a manifest, not a preview. It does **not** yet
-produce collision data, a complete game or proven publishable assets.
+This emits native mesh files and a manifest, not a preview. Optional local
+collision cooking is available with `--collision-config examples/collision-hull.json`;
+see [collision format evidence](docs/collision-format.md). Neither output is yet
+claimed as a complete game or engine/deployment-verified asset.
 
 ## Executables and current scope
 

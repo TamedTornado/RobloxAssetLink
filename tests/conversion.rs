@@ -336,3 +336,41 @@ fn cli_conversion_needs_no_catalog_server_or_credentials() {
     );
     assert!(!failed.exists());
 }
+
+#[test]
+fn collision_cli_emits_native_sidecars_and_honest_acceptance_metadata() {
+    let temporary = tempfile::tempdir().unwrap();
+    let output_path = temporary.path().join("converted");
+    let output = Command::new(env!("CARGO_BIN_EXE_roblox"))
+        .env_clear()
+        .args([
+            "convert",
+            "mesh",
+            "tests/fixtures/doorway.fbx",
+            "--config",
+            "examples/conversion.json",
+            "--collision-config",
+            "examples/collision-hull.json",
+            "--output",
+        ])
+        .arg(&output_path)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let response: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(response["result"]["collisionGenerated"], true);
+    for mesh in response["result"]["meshes"].as_array().unwrap() {
+        assert_eq!(mesh["collision"]["engineVerified"], false);
+        let bytes =
+            fs::read(output_path.join(mesh["collision"]["file"].as_str().unwrap())).unwrap();
+        let decoded = rbx_mesh::read_union_physics_versioned(std::io::Cursor::new(&bytes)).unwrap();
+        let rbx_mesh::union_physics::UnionPhysics::V5(decoded) = decoded else {
+            panic!("wrong collision format");
+        };
+        assert_eq!(decoded.meshes.len(), 1);
+    }
+}

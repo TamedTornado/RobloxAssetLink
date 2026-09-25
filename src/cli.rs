@@ -45,6 +45,9 @@ enum Convert {
         config: PathBuf,
         #[arg(long)]
         output: PathBuf,
+        /// Optional local collision recipe; payload engine acceptance is unverified.
+        #[arg(long)]
+        collision_config: Option<PathBuf>,
     },
 }
 
@@ -94,11 +97,25 @@ fn execute(cli: Cli) -> Result<Value> {
                 source,
                 config,
                 output,
+                collision_config,
             },
     } = &cli.command
     {
         let config = serde_json::from_slice(&std::fs::read(config)?)?;
-        let manifest = roblox_asset_link::convert::convert(source, output, &config)?;
+        let collision = collision_config
+            .as_ref()
+            .map(|path| -> Result<_> {
+                Ok(serde_json::from_slice::<
+                    roblox_asset_link::collision::Recipe,
+                >(&std::fs::read(path)?)?)
+            })
+            .transpose()?;
+        let manifest = roblox_asset_link::convert::convert_with_collision(
+            source,
+            output,
+            &config,
+            collision.as_ref(),
+        )?;
         return Ok(json!({"ok":true,"scope":"offlineConversion","result":manifest}));
     }
     let Command::Assets {

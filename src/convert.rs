@@ -42,11 +42,23 @@ pub struct Entry {
     pub metallic: f32,
     pub roughness: f32,
     pub double_sided: bool,
+    pub collision: Option<CollisionEntry>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CollisionEntry {
+    pub file: String,
+    pub sha256: String,
+    pub hull_count: usize,
+    pub format: &'static str,
+    pub engine_verified: bool,
 }
 
 pub(crate) struct Output {
     pub entry: Entry,
     pub bytes: Vec<u8>,
+    pub geometry: mesh::Mesh,
 }
 
 fn visit(
@@ -166,8 +178,10 @@ fn visit(
                     metallic: pbr.metallic_factor(),
                     roughness: pbr.roughness_factor(),
                     double_sided: material.double_sided(),
+                    collision: None,
                 },
                 bytes,
+                geometry,
             });
         }
     }
@@ -251,11 +265,20 @@ fn read_buffer(root: &Path, uri: &str) -> Result<Vec<u8>> {
 }
 
 pub fn convert(source: &Path, output: &Path, config: &Config) -> Result<Manifest> {
+    convert_with_collision(source, output, config, None)
+}
+
+pub fn convert_with_collision(
+    source: &Path,
+    output: &Path,
+    config: &Config,
+    recipe: Option<&crate::collision::Recipe>,
+) -> Result<Manifest> {
     if !config.metres_per_stud.is_finite() || config.metres_per_stud <= 0. {
         return Err("metresPerStud must be positive and finite".into());
     }
     let bytes = fs::read(source)?;
-    let outputs = if bytes.starts_with(b"glTF")
+    let mut outputs = if bytes.starts_with(b"glTF")
         || source
             .extension()
             .is_some_and(|v| v.eq_ignore_ascii_case("gltf"))
@@ -265,9 +288,29 @@ pub fn convert(source: &Path, output: &Path, config: &Config) -> Result<Manifest
         crate::source_mesh::read(source, &bytes, config)?
     };
 
+    let mut collision_files = Vec::new();
+    if let Some(recipe) = recipe {
+        for artifact in &mut outputs {
+            let hulls = crate::collision::cook(&artifact.geometry, recipe)?;
+            let data = crate::collision::encode(&hulls)?;
+            let file = format!("{}.physics", artifact.entry.file);
+            artifact.entry.collision = Some(CollisionEntry {
+                file: file.clone(),
+                sha256: format!("{:x}", Sha256::digest(&data)),
+                hull_count: hulls.len(),
+                format: "CSGPHS-v5",
+                engine_verified: false,
+            });
+            collision_files.push((file, data));
+        }
+    }
+
     // Validate and encode before creating output. Existing paths are never replaced.
     fs::create_dir(output)?;
     let result = (|| -> Result<Manifest> {
+        for (file, data) in collision_files {
+            fs::write(output.join(file), data)?;
+        }
         let mut meshes = Vec::new();
         for artifact in outputs {
             fs::write(output.join(&artifact.entry.file), artifact.bytes)?;
@@ -277,7 +320,7 @@ pub fn convert(source: &Path, output: &Path, config: &Config) -> Result<Manifest
             format: "roblox-static-mesh-bundle",
             version: 1,
             metres_per_stud: config.metres_per_stud,
-            collision_generated: false,
+            collision_generated: recipe.is_some(),
             meshes,
         };
         fs::write(

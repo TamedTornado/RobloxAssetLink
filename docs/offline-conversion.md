@@ -29,7 +29,9 @@ skinning, animation, morphs, vertex colors, source tangents, extra vertex channe
 and extensions currently fail explicitly. Native vertex colors and tangents are
 supported by the encoder itself; this adapter emits white colors and zero tangent
 bytes for its untextured profile. It does not claim tangent-space shading support.
-Collision is explicitly reported as not generated. Material factors are metadata,
+Collision is opt-in through a separate JSON recipe and is otherwise explicitly
+reported as not generated. See [collision implementation](collision-format.md).
+Material factors are metadata,
 not completed Roblox material objects.
 
 ## Mesh v2.00 layout

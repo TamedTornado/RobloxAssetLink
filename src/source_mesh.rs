@@ -161,8 +161,10 @@ pub(crate) fn read(path: &Path, bytes: &[u8], config: &Config) -> Result<Vec<Out
                     metallic,
                     roughness,
                     double_sided: false,
+                    collision: None,
                 },
                 bytes,
+                geometry,
             });
         }
     }
