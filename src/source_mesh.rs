@@ -240,6 +240,7 @@ fn read_nodes(
                     name: Some(node.element.name.to_string()),
                     vertices: geometry.vertices.len(),
                     triangles: geometry.triangles.len(),
+                    bounds: geometry.bounds()?,
                     base_color: color,
                     metallic,
                     roughness,

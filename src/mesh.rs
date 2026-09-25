@@ -27,6 +27,68 @@ pub struct Mesh {
     pub triangles: Vec<[u32; 3]>,
 }
 
+/// Axis-aligned bounds in the encoded mesh coordinate space, in studs.
+#[derive(Clone, Debug, serde::Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct Bounds {
+    pub min: [f32; 3],
+    pub max: [f32; 3],
+    pub center: [f32; 3],
+    pub size: [f32; 3],
+}
+
+impl Mesh {
+    pub fn bounds(&self) -> Result<Bounds> {
+        bounds(self.vertices.iter())
+    }
+
+    /// v4 subset encoding writes only vertices referenced by triangles.
+    pub fn surface_bounds(&self) -> Result<Bounds> {
+        if self
+            .triangles
+            .iter()
+            .flatten()
+            .any(|index| *index as usize >= self.vertices.len())
+        {
+            return Err("mesh bounds triangle index out of range".into());
+        }
+        bounds(
+            self.triangles
+                .iter()
+                .flatten()
+                .map(|index| &self.vertices[*index as usize]),
+        )
+    }
+}
+
+fn bounds<'a>(mut vertices: impl Iterator<Item = &'a Vertex>) -> Result<Bounds> {
+    let first = vertices.next().ok_or("mesh bounds require vertices")?;
+    let mut min = first.position;
+    let mut max = first.position;
+    for vertex in std::iter::once(first).chain(vertices) {
+        for axis in 0..3 {
+            let value = vertex.position[axis];
+            if !value.is_finite() {
+                return Err("mesh bounds require finite positions".into());
+            }
+            min[axis] = min[axis].min(value);
+            max[axis] = max[axis].max(value);
+        }
+    }
+    let size: [f32; 3] = std::array::from_fn(|axis| max[axis] - min[axis]);
+    if size.iter().any(|value| !value.is_finite()) {
+        return Err("mesh extent exceeds native float representation".into());
+    }
+    let center =
+        std::array::from_fn(|axis| ((f64::from(min[axis]) + f64::from(max[axis])) * 0.5) as f32);
+    Ok(Bounds {
+        min,
+        max,
+        center,
+        size,
+    })
+}
+
 pub fn encode(mesh: &Mesh) -> Result<Vec<u8>> {
     let vertices = u32::try_from(mesh.vertices.len())?;
     let faces = u32::try_from(mesh.triangles.len())?;

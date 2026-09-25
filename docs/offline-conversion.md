@@ -21,6 +21,20 @@ data. The command emits native v2.00 mesh files plus a deterministic manifest.
 JSON configuration requires `metresPerStud`; it has no Studio/plugin settings.
 Output directories must not exist. Source files are never modified.
 
+Every mesh entry now reports `bounds` with `min`, `max`, `center` and `size`
+vectors in encoded mesh coordinates, in studs. Static bounds include the baked
+source transforms and unit conversion; they describe the vertices actually
+written to the native file. There is no invented minimum thickness: planar
+geometry keeps zero extent on its planar axis. Empty/nonfinite geometry and
+extents that cannot fit the native float representation fail. Center calculation
+avoids both finite-coordinate overflow and subnormal rounding loss.
+
+Tests independently decode native GLB/glTF, FBX and OBJ outputs and compare their
+vertex extrema with the manifest. Changing metres-per-stud changes every bound
+component consistently. Bounds provide the data needed for scene sizing; they
+are not themselves proof of MeshPart normalization, pivot behavior or engine
+placement, and this change does not silently overwrite authored scene transforms.
+
 The static adapter bakes scene transforms into positions, applies inverse
 transpose normals, fixes reflected winding, retains UV0 and records material
 factors in the manifest. This is geometry conversion, not finished scene assembly:

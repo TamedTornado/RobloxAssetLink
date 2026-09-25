@@ -164,6 +164,21 @@ fn external_fbx_skin_preserves_clusters_and_deterministic_native_geometry() {
         };
         assert_eq!(native.bones.len(), manifest.rig.len());
         assert_eq!(native.faces.len(), entry.triangles);
+        for axis in 0..3 {
+            let min = native
+                .vertices
+                .iter()
+                .map(|vertex| vertex.pos[axis])
+                .fold(f32::INFINITY, f32::min);
+            let max = native
+                .vertices
+                .iter()
+                .map(|vertex| vertex.pos[axis])
+                .fold(f32::NEG_INFINITY, f32::max);
+            assert_eq!(entry.bounds.min[axis], min);
+            assert_eq!(entry.bounds.max[axis], max);
+            assert_eq!(entry.bounds.size[axis], max - min);
+        }
         let material: u32 = entry
             .file
             .rsplit("primitive-")

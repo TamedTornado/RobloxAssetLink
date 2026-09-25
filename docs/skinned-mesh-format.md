@@ -1,5 +1,13 @@
 # Native skinned mesh encoding — issue 3
 
+Each mesh entry includes bind-space `bounds` (min/max/center/size) in output studs.
+The v4 subset encoder drops source vertices not referenced by any triangle, so
+skin bounds use the referenced surface rather than all source control points.
+This differs intentionally from the static v2 writer, which writes every supplied
+vertex. A regression places an unused vertex far outside the surface and checks
+the bounds against independently decoded native v4 vertices. GLTF and FBX bind
+space outputs are both covered. No thickness, scaling or placement is guessed.
+
 Skin conversion also emits `rig.rbxm`: native Bone roots/children with source
 names and local bind CFrames. The manifest records `rigFile` and `rigSha256`;
 bundles include the artifact and its hash. Both glTF and FBX producers share this

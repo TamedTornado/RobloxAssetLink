@@ -265,6 +265,7 @@ pub(crate) fn convert(source: &Path, output: &Path, config: &Config) -> Result<M
             sha256: format!("{:x}", Sha256::digest(&bytes)),
             source_vertices: geometry.geometry.vertices.len(),
             triangles: geometry.geometry.triangles.len(),
+            bounds: geometry.geometry.surface_bounds()?,
             base_color: entry.base_color,
             metallic: entry.metallic,
             roughness: entry.roughness,
