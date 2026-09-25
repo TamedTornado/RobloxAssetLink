@@ -14,6 +14,7 @@ pub mod config;
 pub mod convert;
 pub mod material;
 pub mod material_gltf;
+pub mod media_mux;
 pub mod mesh;
 mod rigid;
 pub mod scene;

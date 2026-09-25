@@ -107,7 +107,7 @@ Tests decode the VP9 output of an independently encoded synthetic H.264 fixture,
 check dimensions/timestamps, deterministic bytes, no-overwrite, limits and
 truncation, then run CLI without PATH and bundle/native scene binding. This is a
 working **silent-video profile**, not completion of general video conversion.
-Audio/video muxing, broader color/timing profiles and
+Direct conversion of source videos containing audio, broader color/timing profiles and
 actual Roblox playback/deployment acceptance remain open. `engineVerified` stays
 false: codec/container correctness is not engine acceptance.
 
@@ -128,3 +128,40 @@ requiring strictly increasing timestamps. MP4→WebM→WebM retains six frames a
 the original rational rate. Unit tests reject duplicate, dropped, reversed and
 irregular timestamps. Timing failures report the frame, PTS, origin and rational
 time bases rather than a context-free error.
+
+## Packaging preconverted audio and video
+
+`roblox build media media.json --output combined.webm` packages one existing
+VP9 WebM video and one Ogg Vorbis/Opus audio stream without re-encoding. JSON
+requires `video`, `audio`, `audioOffsetMillis` (nonnegative integer), and positive
+`maxPackets` (total packet policy). Input paths must stay under the specification
+directory. Bundle conversion kind `media` takes this specification as its `source`
+and produces `video.webm`, usable by native VideoFrame scene bindings.
+
+Inputs retain their existing timeline; the explicit offset delays audio relative
+to that timeline. Codec preroll/negative initial audio timestamps and packet side
+data are preserved rather than forcibly rebased. Streams may have different
+lengths; neither is implicitly truncated, padded or looped. Codec/type mismatches,
+extra streams, corrupt packet flags, absent/backwards timestamps and exhausted
+packet policy fail. This is packaging of already converted assets, not a general
+codec validator or a substitute for source conversion. No network protocol,
+codec executable, Studio or cloud service is involved.
+
+Tests prove unchanged compressed packet payloads, audio offset within container
+timestamp resolution, deterministic bytes, no-overwrite, CLI/bundle equivalence,
+and exact decoded Vorbis samples before/after muxing. An independent Opus fixture
+additionally proves preservation of initial codec delay and final padding through
+the WebM container. All 9600 decoded samples survive unchanged. Input conversion
+and runtime playback remain separate: combined MP4 audio/video source conversion
+and actual Roblox VideoFrame acceptance are still unverified/unfinished.
+
+The mux verification exposed a pre-existing audio-container interoperability
+defect: the short Vorbis output's single data page let FFmpeg infer the initial
+overlap incorrectly, producing 4154 samples where libvorbis produced 4410.
+The audio writer now emits explicit packet-page granules (the libogg zero-size
+flush request), making the initial zero granule visible. This is a deliberate
+container-layout invariant, not a hidden memory/timeout/quality limit. The
+regression requires 4410 decoded samples through FFmpeg both before and after
+muxing, while the independent libvorbis tests continue to require the same count.
+Compressed sample data is unchanged by muxing; the source writer's Ogg framing
+is corrected rather than weakening the sample-count assertion.

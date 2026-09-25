@@ -93,6 +93,11 @@ pub fn convert(source: &Path, output: &Path, config: &Config) -> Result<Conversi
         .make(&track.codec_params, &DecoderOptions { verify: true })?;
     let mut encoder =
         VorbisEncoderBuilder::new_with_serial(sample_rate, channels, Vec::new(), serial)
+            // Zero requests packet-page boundaries, making initial granule zero
+            // explicit even for short clips. Otherwise FFmpeg can mis-infer the
+            // initial overlap and discard real samples. This is container layout,
+            // not a resource limit or quality tuning budget.
+            .minimum_page_data_size(Some(0))
             .bitrate_management_strategy(VorbisBitrateManagementStrategy::QualityVbr {
                 target_quality: config.quality,
             })

@@ -51,6 +51,12 @@ enum Command {
 
 #[derive(Subcommand)]
 enum Build {
+    /// Mux preconverted local VP9 video and Vorbis/Opus audio into WebM.
+    Media {
+        source: PathBuf,
+        #[arg(long)]
+        output: PathBuf,
+    },
     /// Convert assets and assemble locally linked scenes from a JSON plan.
     Bundle {
         source: PathBuf,
@@ -235,6 +241,14 @@ fn execute(cli: Cli) -> Result<Value> {
     {
         return Ok(
             json!({"ok":true,"scope":"offlineConversion","result":roblox_asset_link::animation::convert(source,output)?}),
+        );
+    }
+    if let Command::Build {
+        command: Build::Media { source, output },
+    } = &cli.command
+    {
+        return Ok(
+            json!({"ok":true,"scope":"offlineMediaBuild","result":roblox_asset_link::media_mux::build(source,output)?}),
         );
     }
     if let Command::Build {
