@@ -35,6 +35,10 @@ asset-linked game build or deployment pipeline.
 `roblox convert audio` performs in-process Ogg Vorbis conversion; see
 [media conversion](docs/media-conversion.md) for its current profile and tests.
 
+`roblox build bundle` combines declared conversions with asset-linked native
+scenes. See [offline bundles](docs/offline-bundles.md). This does not publish or
+claim native engine acceptance.
+
 ## Executables and current scope
 
 - `roblox`: short-lived commands with JSON results, JSON errors on stderr, and

@@ -1,0 +1,147 @@
+use rbx_dom_weak::types::Variant;
+use roblox_asset_link::bundle::build;
+use serde_json::json;
+use std::{fs, path::Path};
+
+fn inputs(root: &Path) -> std::path::PathBuf {
+    fs::copy("tests/fixtures/doorway.fbx", root.join("doorway.fbx")).unwrap();
+    image::RgbaImage::from_pixel(2, 2, image::Rgba([20, 40, 60, 255]))
+        .save(root.join("color.png"))
+        .unwrap();
+    let plan = json!({"assets":[
+        {"id":"walls/../logical-id","conversion":{"kind":"mesh","source":"doorway.fbx","config":{"metresPerStud":0.28},"collision":{"mode":"hull"}}},
+        {"id":"paint","conversion":{"kind":"texture","source":"color.png","config":{"operation":"color","maxWidth":2,"maxHeight":2,"maxDecodedBytes":4096}}}
+    ],"scenes":[{"id":"test-model","source":"scene.json"}]});
+    let scene = json!({"kind":"model","roots":[{
+        "id":"part","class":"MeshPart","name":"Wall","properties":{"Anchored":{"Bool":true}},"references":{},
+        "assets":{
+            "MeshContent":{"asset":"walls/../logical-id","file":"node-1-primitive-0.mesh"},
+            "PhysicalConfigData":{"asset":"walls/../logical-id","file":"node-1-primitive-0.mesh.physics"}
+        },
+        "children":[{"id":"surface","class":"SurfaceAppearance","name":"Paint","properties":{},"references":{},"children":[],
+            "assets":{"ColorMapContent":{"asset":"paint","file":"color.png"}}}]
+    }]});
+    fs::write(
+        root.join("scene.json"),
+        serde_json::to_vec_pretty(&scene).unwrap(),
+    )
+    .unwrap();
+    let path = root.join("build.json");
+    fs::write(&path, serde_json::to_vec_pretty(&plan).unwrap()).unwrap();
+    path
+}
+
+#[test]
+fn bundle_converts_and_links_native_assets_without_remote_ids() {
+    let temporary = tempfile::tempdir().unwrap();
+    let source = inputs(temporary.path());
+    let output = temporary.path().join("out");
+    let manifest = build(&source, &output).unwrap();
+    assert!(!manifest.published);
+    assert!(!manifest.engine_verified);
+    assert_eq!(manifest.files.len(), 7);
+    assert_eq!(manifest.scenes.len(), 1);
+    let bytes = fs::read(output.join(&manifest.scenes[0].path)).unwrap();
+    let dom = rbx_binary::from_reader(bytes.as_slice()).unwrap();
+    let part = dom.get_by_ref(dom.root().children()[0]).unwrap();
+    let expected = manifest
+        .files
+        .iter()
+        .find(|f| f.file == "node-1-primitive-0.mesh")
+        .unwrap();
+    assert_eq!(
+        part.properties.get(&"MeshContent".into()),
+        Some(&Variant::Content(rbx_dom_weak::types::Content::from_uri(
+            &expected.local_uri
+        )))
+    );
+    let physics = match part.properties.get(&"PhysicalConfigData".into()).unwrap() {
+        Variant::SharedString(value) => value.data(),
+        Variant::NetAssetRef(value) => value.data(),
+        other => panic!("unexpected native collision type {other:?}"),
+    };
+    let expected_physics = manifest
+        .files
+        .iter()
+        .find(|f| f.file == "node-1-primitive-0.mesh.physics")
+        .unwrap();
+    assert_eq!(
+        physics,
+        fs::read(output.join(&expected_physics.path)).unwrap()
+    );
+    let surface = dom.get_by_ref(part.children()[0]).unwrap();
+    let expected_color = manifest.files.iter().find(|f| f.asset == "paint").unwrap();
+    assert_eq!(
+        surface.properties.get(&"ColorMapContent".into()),
+        Some(&Variant::Content(rbx_dom_weak::types::Content::from_uri(
+            &expected_color.local_uri
+        )))
+    );
+    for file in &manifest.files {
+        assert!(output.join(&file.path).is_file());
+    }
+
+    let second = temporary.path().join("again");
+    build(&source, &second).unwrap();
+    assert_eq!(
+        fs::read(output.join("manifest.json")).unwrap(),
+        fs::read(second.join("manifest.json")).unwrap()
+    );
+    assert_eq!(
+        bytes,
+        fs::read(second.join(&manifest.scenes[0].path)).unwrap()
+    );
+}
+
+#[test]
+fn missing_asset_bindings_roll_back_owned_output_and_preserve_sources() {
+    let temporary = tempfile::tempdir().unwrap();
+    let source = inputs(temporary.path());
+    let scene_path = temporary.path().join("scene.json");
+    let mut scene: serde_json::Value =
+        serde_json::from_slice(&fs::read(&scene_path).unwrap()).unwrap();
+    scene["roots"][0]["assets"]["MeshContent"]["file"] = "absent.mesh".into();
+    fs::write(scene_path, serde_json::to_vec(&scene).unwrap()).unwrap();
+    let original = fs::read(temporary.path().join("doorway.fbx")).unwrap();
+    let output = temporary.path().join("out");
+    assert!(
+        build(&source, &output)
+            .err()
+            .unwrap()
+            .to_string()
+            .contains("missing local asset binding")
+    );
+    assert!(!output.exists());
+    assert_eq!(
+        original,
+        fs::read(temporary.path().join("doorway.fbx")).unwrap()
+    );
+}
+
+#[test]
+fn bundle_cli_needs_no_credentials_and_never_overwrites_a_completed_bundle() {
+    let temporary = tempfile::tempdir().unwrap();
+    let source = inputs(temporary.path());
+    let out = temporary.path().join("out");
+    let invoke = || {
+        std::process::Command::new(env!("CARGO_BIN_EXE_roblox"))
+            .env_clear()
+            .args(["build", "bundle"])
+            .arg(&source)
+            .arg("--output")
+            .arg(&out)
+            .output()
+            .unwrap()
+    };
+    let result = invoke();
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    let response: serde_json::Value = serde_json::from_slice(&result.stdout).unwrap();
+    assert_eq!(response["scope"], "offlineBundleBuild");
+    let bytes = fs::read(out.join("manifest.json")).unwrap();
+    assert!(!invoke().status.success());
+    assert_eq!(bytes, fs::read(out.join("manifest.json")).unwrap());
+}

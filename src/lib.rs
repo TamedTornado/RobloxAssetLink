@@ -4,6 +4,7 @@ use std::{fs, path::Path};
 
 pub mod animation;
 pub mod audio;
+pub mod bundle;
 pub mod catalog;
 pub mod collision;
 mod collision_format;

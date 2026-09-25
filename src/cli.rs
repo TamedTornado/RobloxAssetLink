@@ -51,6 +51,12 @@ enum Command {
 
 #[derive(Subcommand)]
 enum Build {
+    /// Convert assets and assemble locally linked scenes from a JSON plan.
+    Bundle {
+        source: PathBuf,
+        #[arg(long)]
+        output: PathBuf,
+    },
     Scene {
         source: PathBuf,
         #[arg(long)]
@@ -129,6 +135,14 @@ enum Assets {
 }
 
 fn execute(cli: Cli) -> Result<Value> {
+    if let Command::Build {
+        command: Build::Bundle { source, output },
+    } = &cli.command
+    {
+        return Ok(
+            json!({"ok":true,"scope":"offlineBundleBuild","result":roblox_asset_link::bundle::build(source,output)?}),
+        );
+    }
     if let Command::Convert {
         command:
             Convert::Audio {
@@ -211,6 +225,7 @@ fn execute(cli: Cli) -> Result<Value> {
             "commandGroups":["assets","convert","build","compile"],"assetOperations":["init","add","edit","remove","list","inspect","validate","config"],
             "localLuauCompilation":true,
             "offlineSceneSerialization":true,
+            "offlineAssetBundleBuild":true,
             "offlineConversion":["static-gltf-to-mesh-v2","static-fbx-to-mesh-v2","static-obj-to-mesh-v2","textures-to-png","collision-to-csgphs-v5","audio-to-ogg-vorbis"],"offlineGameBuild":false,
             "serverExecutable":"roblox-server","requiresStudioForCatalog":false,
             "persistentStudioImport":false,"studioCommandExecution":false

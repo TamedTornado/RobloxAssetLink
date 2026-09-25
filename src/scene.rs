@@ -2,7 +2,7 @@
 use crate::Result;
 use rbx_dom_weak::{
     InstanceBuilder, WeakDom,
-    types::{Ref, Variant},
+    types::{Content, ContentId, NetAssetRef, Ref, SharedString, Variant, VariantType},
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -38,6 +38,38 @@ pub struct Node {
     pub references: BTreeMap<String, String>,
     pub children: Vec<Node>,
     pub script_source: Option<PathBuf>,
+    #[serde(default)]
+    pub assets: BTreeMap<String, AssetReference>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AssetReference {
+    pub asset: String,
+    pub file: String,
+}
+
+pub struct ResolvedAsset {
+    pub uri: String,
+    pub path: PathBuf,
+}
+
+pub type AssetMap = BTreeMap<AssetReference, ResolvedAsset>;
+
+fn property_type(class: &str, property: &str) -> Result<VariantType> {
+    let database = rbx_reflection_database::get_bundled();
+    let mut current = Some(class);
+    while let Some(name) = current {
+        let descriptor = database
+            .classes
+            .get(name)
+            .ok_or_else(|| format!("unknown scene class: {name}"))?;
+        if let Some(descriptor) = descriptor.properties.get(property) {
+            return Ok(descriptor.data_type.ty());
+        }
+        current = descriptor.superclass;
+    }
+    Err(format!("unknown property {class}.{property}").into())
 }
 
 #[derive(Serialize)]
@@ -57,6 +89,7 @@ fn insert(
     root: &Path,
     ids: &mut HashMap<String, Ref>,
     compiler: Option<&crate::scripts::Config>,
+    assets: &AssetMap,
 ) -> Result<()> {
     if node.id.is_empty() || node.class.is_empty() {
         return Err("scene node id and class must be nonempty".into());
@@ -65,23 +98,13 @@ fn insert(
     if !database.classes.contains_key(node.class.as_str()) {
         return Err(format!("unknown scene class: {}", node.class).into());
     }
-    for property in node.properties.keys().chain(node.references.keys()) {
-        let mut class = Some(node.class.as_str());
-        let mut found = false;
-        while let Some(name) = class {
-            let descriptor = database
-                .classes
-                .get(name)
-                .ok_or("reflection superclass missing")?;
-            if descriptor.properties.contains_key(property.as_str()) {
-                found = true;
-                break;
-            }
-            class = descriptor.superclass;
-        }
-        if !found {
-            return Err(format!("unknown property {}.{property}", node.class).into());
-        }
+    for property in node
+        .properties
+        .keys()
+        .chain(node.references.keys())
+        .chain(node.assets.keys())
+    {
+        property_type(&node.class, property)?;
     }
     if ids.contains_key(&node.id) {
         return Err(format!("duplicate scene id: {}", node.id).into());
@@ -95,6 +118,7 @@ fn insert(
             || name == "Parent"
             || matches!(value, Variant::Ref(_))
             || node.references.contains_key(name)
+            || node.assets.contains_key(name)
         {
             return Err(format!(
                 "property {name} conflicts with explicit scene structure/references"
@@ -108,6 +132,31 @@ fn insert(
             validate_script(source, node, compiler)?;
         }
         builder = builder.with_property(name.as_str(), value.clone());
+    }
+    for (property, reference) in &node.assets {
+        if node.references.contains_key(property)
+            || matches!(property.as_str(), "Name" | "Parent" | "Source")
+        {
+            return Err(format!("asset binding conflicts with scene property {property}").into());
+        }
+        let asset = assets.get(reference).ok_or_else(|| {
+            format!("missing local asset binding: {reference:?}; use build bundle")
+        })?;
+        let value = match property_type(&node.class, property)? {
+            VariantType::Content => Variant::Content(Content::from_uri(&asset.uri)),
+            VariantType::ContentId => Variant::ContentId(ContentId::from(asset.uri.clone())),
+            VariantType::SharedString => {
+                Variant::SharedString(SharedString::new(fs::read(&asset.path)?))
+            }
+            VariantType::NetAssetRef => {
+                Variant::NetAssetRef(NetAssetRef::new(fs::read(&asset.path)?))
+            }
+            VariantType::BinaryString => Variant::BinaryString(fs::read(&asset.path)?.into()),
+            other => {
+                return Err(format!("property {property} cannot bind an asset ({other:?})").into());
+            }
+        };
+        builder = builder.with_property(property.as_str(), value);
     }
     if let Some(source) = &node.script_source {
         if !matches!(
@@ -130,7 +179,7 @@ fn insert(
     let reference = dom.insert(parent, builder);
     ids.insert(node.id.clone(), reference);
     for child in &node.children {
-        insert(dom, reference, child, root, ids, compiler)?;
+        insert(dom, reference, child, root, ids, compiler, assets)?;
     }
     Ok(())
 }
@@ -174,6 +223,10 @@ fn link(dom: &mut WeakDom, node: &Node, ids: &HashMap<String, Ref>) -> Result<()
 }
 
 pub fn build(source: &Path, output: &Path) -> Result<BuildResult> {
+    build_with_assets(source, output, &AssetMap::new())
+}
+
+pub fn build_with_assets(source: &Path, output: &Path, assets: &AssetMap) -> Result<BuildResult> {
     let source = source.canonicalize()?;
     let root = source.parent().ok_or("scene source directory missing")?;
     let specification: Specification = serde_json::from_slice(&fs::read(&source)?)?;
@@ -198,6 +251,7 @@ pub fn build(source: &Path, output: &Path) -> Result<BuildResult> {
             root,
             &mut ids,
             specification.script_compiler.as_ref(),
+            assets,
         )?;
     }
     for node in &specification.roots {
