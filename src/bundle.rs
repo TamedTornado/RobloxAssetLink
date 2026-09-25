@@ -207,7 +207,11 @@ fn build_asset(
     match &asset.conversion {
         Conversion::Terrain { source } => {
             let manifest = crate::terrain::convert(&local(root, source)?, output)?;
-            Ok(vec![manifest.file.into()])
+            let mut files = vec![manifest.file.into()];
+            if let Some(file) = manifest.physics_file {
+                files.push(file.into());
+            }
+            Ok(files)
         }
         Conversion::MediaSource { source, config } => {
             fs::create_dir(output)?;

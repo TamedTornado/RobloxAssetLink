@@ -41,7 +41,7 @@ fn independent_physics_grid_reencodes_exactly_and_its_fixture_coverage_matches_v
     )
     .unwrap();
     let mut expected = HashSet::new();
-    for chunk in smooth.chunks {
+    for chunk in &smooth.chunks {
         for (index, cell) in chunk.cells.iter().enumerate() {
             if cell.material == 0 {
                 continue;
@@ -64,6 +64,55 @@ fn independent_physics_grid_reencodes_exactly_and_its_fixture_coverage_matches_v
     }
     // An observed fixture relationship, not a claimed general collision cooker.
     assert_eq!(actual, expected);
+    let generated = roblox_asset_link::terrain_physics::lazy_index(&smooth, &limits).unwrap();
+    assert_eq!(
+        generated.coordinate_groups[0]
+            .iter()
+            .copied()
+            .collect::<HashSet<_>>(),
+        actual
+    );
+    assert_eq!(generated.coordinate_groups[0].len(), 136);
+    assert!(generated.coordinate_groups[1].is_empty());
+    assert!(generated.coordinate_groups[2].is_empty());
+    assert_eq!(
+        decode(&encode(&generated, &limits).unwrap(), &limits).unwrap(),
+        generated
+    );
+}
+
+#[test]
+fn lazy_index_covers_negative_boundaries_and_honors_entry_limits() {
+    let grid = terrain_grid::Grid {
+        chunk_exponent: 0,
+        chunks: vec![terrain_grid::Chunk {
+            coordinate: [0; 3],
+            cells: vec![terrain_grid::Cell {
+                material: 1,
+                occupancy: 0,
+                auxiliary: 0,
+            }],
+        }],
+    };
+    let limits = Limits { max_entries: 8 };
+    let generated = roblox_asset_link::terrain_physics::lazy_index(&grid, &limits).unwrap();
+    assert_eq!(generated.coordinate_groups[0].len(), 8);
+    assert!(generated.coordinate_groups[0].contains(&[-1, -1, -1]));
+    assert!(generated.coordinate_groups[0].contains(&[0, 0, 0]));
+    assert!(
+        roblox_asset_link::terrain_physics::lazy_index(&grid, &Limits { max_entries: 7 }).is_err()
+    );
+    let mut grid = grid;
+    grid.chunks[0].cells[0] = terrain_grid::Cell::default();
+    assert!(
+        roblox_asset_link::terrain_physics::lazy_index(&grid, &limits)
+            .unwrap()
+            .coordinate_groups[0]
+            .is_empty()
+    );
+    grid.chunks[0].cells[0].material = 2;
+    grid.chunks[0].coordinate = [i32::MIN, 0, 0];
+    assert!(roblox_asset_link::terrain_physics::lazy_index(&grid, &limits).is_err());
 }
 
 #[test]

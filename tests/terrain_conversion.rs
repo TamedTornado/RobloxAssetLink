@@ -59,7 +59,7 @@ fn heightmap_bundle_embeds_native_grid_and_tracks_image_changes() {
     let source = root.join("terrain.json");
     write(
         &source,
-        &json!({"kind":"heightmap","source":"height.png","config":{
+        &json!({"kind":"heightmap","source":"height.png","physics":{"maxEntries":64},"config":{
             "terrain":config(),"material":"ground","pixelSizeMetres":2,"floorMetres":0,"heightMinMetres":0,"heightMaxMetres":2,
             "rowDirection":"positive","maxWidth":2,"maxHeight":1,"maxDecodedBytes":4096
         }}),
@@ -67,10 +67,13 @@ fn heightmap_bundle_embeds_native_grid_and_tracks_image_changes() {
     let standalone = root.join("standalone");
     let converted = terrain::convert(&source, &standalone).unwrap();
     assert!(converted.heightmap_sha256.is_some());
+    assert!(converted.physics_generated);
+    assert_eq!(converted.physics_kind, Some("native-lazy-spatial-index"));
+    assert!(!converted.engine_verified);
     let scene = json!({"kind":"place","roots":[{
         "id":"world","class":"Workspace","name":"Workspace","properties":{},"references":{},"children":[{
             "id":"terrain","class":"Terrain","name":"Terrain","properties":{},"references":{},"children":[],
-            "assets":{"SmoothGrid":{"asset":"land","file":"terrain.smoothgrid"}}
+            "assets":{"SmoothGrid":{"asset":"land","file":"terrain.smoothgrid"},"PhysicsGrid":{"asset":"land","file":"terrain.physicsgrid"}}
         }]
     }]});
     write(&root.join("scene.json"), &scene);
@@ -96,6 +99,22 @@ fn heightmap_bundle_embeds_native_grid_and_tracks_image_changes() {
     };
     let bytes: &[u8] = value.as_ref();
     assert_eq!(bytes, fs::read(standalone.join(converted.file)).unwrap());
+    let rbx_dom_weak::types::Variant::BinaryString(physics) =
+        &instance.properties[&"PhysicsGrid".into()]
+    else {
+        panic!("missing PhysicsGrid");
+    };
+    let physics_bytes: &[u8] = physics.as_ref();
+    assert_eq!(
+        physics_bytes,
+        fs::read(standalone.join(converted.physics_file.unwrap())).unwrap()
+    );
+    let decoded = roblox_asset_link::terrain_physics::decode(
+        physics_bytes,
+        &roblox_asset_link::terrain_physics::Limits { max_entries: 64 },
+    )
+    .unwrap();
+    assert!(!decoded.coordinate_groups[0].is_empty());
     roblox_asset_link::bundle_verify::verify(&first).unwrap();
     let second = root.join("second");
     bundle::build(&build, &second).unwrap();

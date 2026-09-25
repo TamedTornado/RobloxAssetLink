@@ -1,6 +1,8 @@
-//! PhysicsGrid v2 wire preservation. This is not collision-data generation.
-use crate::Result;
+//! PhysicsGrid v2 wire preservation and native lazy spatial-index generation.
+//! This does not precompute triangle/contact geometry.
+use crate::{Result, terrain_grid};
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeSet;
 
 /// Native decoder consumes exactly three independently delta-coded groups.
 const GROUP_COUNT: usize = 3;
@@ -114,4 +116,73 @@ pub fn encode(grid: &Grid, limits: &Limits) -> Result<Vec<u8>> {
         }
     }
     Ok(bytes)
+}
+
+/// Native group-zero entries request lazy mask recomputation from voxel data.
+/// This produces a spatial candidate index, not triangle/contact geometry.
+pub fn lazy_index(voxels: &terrain_grid::Grid, limits: &Limits) -> Result<Grid> {
+    const REGION_EDGE: i32 = 8;
+    const NATIVE_EXPONENT: u8 = 3;
+    validate(NATIVE_EXPONENT, limits)?;
+    if voxels.chunk_exponent > terrain_grid::MAX_CHUNK_EXPONENT {
+        return Err("unsupported SmoothGrid chunk exponent".into());
+    }
+    let edge = 1i32 << voxels.chunk_exponent;
+    let count = (edge as usize).pow(3);
+    let mut candidates = BTreeSet::new();
+    let mut chunks = BTreeSet::new();
+    for chunk in &voxels.chunks {
+        if chunk.cells.len() != count || !chunks.insert(chunk.coordinate) {
+            return Err("invalid SmoothGrid chunk shape/coordinate".into());
+        }
+        let mut origin = [0i32; 3];
+        for (axis, value) in origin.iter_mut().enumerate() {
+            *value = chunk.coordinate[axis]
+                .checked_mul(edge)
+                .ok_or("terrain physics coordinate overflow")?;
+        }
+        for (index, cell) in chunk.cells.iter().enumerate() {
+            if cell.material == 0 {
+                continue;
+            }
+            let e = edge as usize;
+            let local = [index % e, index / (e * e), (index / e) % e];
+            let mut low = [0; 3];
+            let mut high = [0; 3];
+            for axis in 0..3 {
+                let coordinate = origin[axis]
+                    .checked_add(local[axis] as i32)
+                    .ok_or("terrain physics coordinate overflow")?;
+                low[axis] = coordinate
+                    .checked_sub(1)
+                    .ok_or("terrain physics halo overflow")?
+                    .div_euclid(REGION_EDGE);
+                high[axis] = coordinate
+                    .checked_add(1)
+                    .ok_or("terrain physics halo overflow")?
+                    .div_euclid(REGION_EDGE);
+            }
+            // Native masks inspect an eight-cell region with a one-cell border.
+            // Index all regions whose inspection volume can contain this cell.
+            for x in low[0]..=high[0] {
+                for y in low[1]..=high[1] {
+                    for z in low[2]..=high[2] {
+                        let coordinate = [x, y, z];
+                        if !candidates.contains(&coordinate)
+                            && candidates.len() >= limits.max_entries
+                        {
+                            return Err(
+                                "terrain physics index exceeds configured entry budget".into()
+                            );
+                        }
+                        candidates.insert(coordinate);
+                    }
+                }
+            }
+        }
+    }
+    Ok(Grid {
+        exponent: NATIVE_EXPONENT,
+        coordinate_groups: [candidates.into_iter().collect(), Vec::new(), Vec::new()],
+    })
 }

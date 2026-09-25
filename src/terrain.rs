@@ -13,10 +13,12 @@ pub enum Specification {
     Voxels {
         config: terrain_voxels::Config,
         voxels: Vec<terrain_voxels::Voxel>,
+        physics: Option<crate::terrain_physics::Limits>,
     },
     Heightmap {
         source: PathBuf,
         config: terrain_heightmap::Config,
+        physics: Option<crate::terrain_physics::Limits>,
     },
 }
 
@@ -33,6 +35,9 @@ pub struct Manifest {
     pub chunks: usize,
     pub cells: usize,
     pub physics_generated: bool,
+    pub physics_file: Option<&'static str>,
+    pub physics_sha256: Option<String>,
+    pub physics_kind: Option<&'static str>,
     pub engine_verified: bool,
 }
 
@@ -49,13 +54,21 @@ pub fn convert(source: &Path, output: &Path) -> Result<Manifest> {
     let source = source.canonicalize()?;
     let bytes = fs::read(&source)?;
     let specification: Specification = serde_json::from_slice(&bytes)?;
-    let (grid, config, heightmap_sha256) = match &specification {
-        Specification::Voxels { config, voxels } => {
-            (terrain_voxels::build(voxels, config)?, config, None)
-        }
+    let (grid, config, heightmap_sha256, physics) = match &specification {
+        Specification::Voxels {
+            config,
+            voxels,
+            physics,
+        } => (
+            terrain_voxels::build(voxels, config)?,
+            config,
+            None,
+            physics,
+        ),
         Specification::Heightmap {
             source: image,
             config,
+            physics,
         } => {
             let image = image_source(&source, image)?;
             let hash = format!("{:x}", Sha256::digest(fs::read(&image)?));
@@ -63,10 +76,18 @@ pub fn convert(source: &Path, output: &Path) -> Result<Manifest> {
                 terrain_heightmap::read(&image, config)?,
                 &config.terrain,
                 Some(hash),
+                physics,
             )
         }
     };
     let encoded = terrain_grid::encode(&grid, &config.limits)?;
+    let physics_bytes = physics
+        .as_ref()
+        .map(|limits| {
+            let index = crate::terrain_physics::lazy_index(&grid, limits)?;
+            crate::terrain_physics::encode(&index, limits)
+        })
+        .transpose()?;
     let manifest = Manifest {
         format: "roblox-smooth-grid-v1",
         file: "terrain.smoothgrid",
@@ -77,12 +98,20 @@ pub fn convert(source: &Path, output: &Path) -> Result<Manifest> {
         chunk_exponent: grid.chunk_exponent,
         chunks: grid.chunks.len(),
         cells: grid.chunks.iter().map(|chunk| chunk.cells.len()).sum(),
-        physics_generated: false,
+        physics_generated: physics_bytes.is_some(),
+        physics_file: physics_bytes.as_ref().map(|_| "terrain.physicsgrid"),
+        physics_sha256: physics_bytes
+            .as_ref()
+            .map(|bytes| format!("{:x}", Sha256::digest(bytes))),
+        physics_kind: physics_bytes.as_ref().map(|_| "native-lazy-spatial-index"),
         engine_verified: false,
     };
     fs::create_dir(output)?;
     let result = (|| -> Result<()> {
         fs::write(output.join(manifest.file), encoded)?;
+        if let Some(bytes) = physics_bytes {
+            fs::write(output.join("terrain.physicsgrid"), bytes)?;
+        }
         fs::write(
             output.join("manifest.json"),
             serde_json::to_vec_pretty(&manifest)?,

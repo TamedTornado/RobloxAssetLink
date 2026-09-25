@@ -85,8 +85,9 @@ Scene sources use the existing typed scene format and compiler gate.
 
 `terrain` accepts a terrain specification containing sparse voxels or a scalar
 PNG heightmap and emits `terrain.smoothgrid`. Terrain scene nodes can bind it to
-`SmoothGrid`; image dependencies participate in cache invalidation. This does not
-generate a physics cache or establish engine acceptance. See
+`SmoothGrid`; image dependencies participate in cache invalidation. An explicit
+physics budget can also emit a native lazy spatial index for `PhysicsGrid`, not
+fully precomputed contact geometry. Neither output establishes engine acceptance. See
 [terrain conversion and its explicit boundaries](terrain-format.md).
 
 `material` accepts a `source` material JSON document as described in

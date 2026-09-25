@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
 /// Observed native format bound: the reader rejects chunk exponents above eight.
-const MAX_CHUNK_EXPONENT: u8 = 8;
+pub(crate) const MAX_CHUNK_EXPONENT: u8 = 8;
 /// The run length is stored as a byte plus one.
 const MAX_RUN: usize = 256;
 

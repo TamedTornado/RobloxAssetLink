@@ -56,7 +56,8 @@ Wire structure established from the fixture and the installed reader:
 The wire codec intentionally exposes raw material, occupancy and auxiliary bytes.
 The sparse voxel adapter below supplies the separately established public material
 mapping and normalized occupancy conversion. Mixed solid/liquid auxiliary-channel
-authoring, PhysicsGrid generation and newer fragment formats remain unfinished.
+authoring and newer fragment formats remain unfinished. PhysicsGrid supports the
+explicit native lazy-index profile described below, not precomputed contact geometry.
 
 ## Metric sparse voxel adapter
 
@@ -102,7 +103,7 @@ origins, negative chunk boundaries, native X/Z/Y order, deterministic source-ord
 independence and configured resource rejection. Reconstructing the independent
 Rojo fixture as sparse Grass/Rock voxels and re-encoding reproduces all original
 bytes. This is stronger than a self-generated roundtrip, but still not live
-rendering/physics acceptance. PhysicsGrid handling remains to be established.
+rendering/physics acceptance. The optional PhysicsGrid index has a separate contract.
 
 ## Heightmaps and the conversion boundary
 
@@ -141,12 +142,15 @@ Terrain bytes with standalone conversion, check cache hits/invalidation, and rej
 missing inputs. Referenced image paths cannot escape the heightmap document
 directory; conversion never overwrites an existing output directory.
 
-The conversion manifest explicitly reports `physicsGenerated: false` and
-`engineVerified: false`. **This is a generated SmoothGrid payload, not yet a proven
-playable terrain artifact.** It neither invents PhysicsGrid bytes nor copies a
-fixture's unrelated physics data into newly generated terrain. Establishing whether
-current engines regenerate that data, or what must be generated locally, remains
-part of the open terrain issue.
+To generate a native lazy spatial index, add `"physics":{"maxEntries":256}`
+at the terrain document's top level (budget shown is an example, not a default).
+This emits `terrain.physicsgrid`; bind it to the Terrain node's `PhysicsGrid`
+property using the same asset-reference syntax. The manifest reports its file/hash,
+`physicsGenerated: true` and `physicsKind: "native-lazy-spatial-index"`. Without
+the option it emits no physics file and reports `physicsGenerated: false`.
+`engineVerified` remains false in both cases. **Neither mode is yet a proven
+playable terrain artifact.** No unrelated fixture data is copied into generated
+terrain, and no fully precomputed collision-geometry claim is made.
 
 ### Installed-reader evidence
 
@@ -176,8 +180,9 @@ bytes, proprietary assets, decompiled source or leaked source are committed.
 `terrain_physics::{decode, encode}` now preserves the independent fixture's
 PhysicsGrid as structured coordinate groups rather than an unexplained blob.
 It requires an explicit positive `maxEntries` budget and rejects unknown versions,
-unsupported exponents, truncation, excess counts and trailing bytes. It does not
-derive physics state from a new SmoothGrid or attach unrelated fixture data.
+unsupported exponents, truncation, excess counts and trailing bytes. The raw codec
+preserves supplied state; the separately requested `lazy_index` generator derives
+candidate regions from a new SmoothGrid as described below.
 
 The payload starts with version byte 2 and an exponent byte (native reader bound
 0–8). It then contains exactly three groups. Each group begins with a big-endian
@@ -214,14 +219,37 @@ Installed executable trace (same hash as above):
   not interpreted as an established alternative physics resolution. The
   SmoothGrid setter follows a different voxel-grid path.
 
-Both regenerated payloads now pass native place serialization/deserialization
-with exact fixture bytes. This does not establish that an omitted PhysicsGrid is
-automatically rebuilt, that all three groups can be synthesized from occupancy
-alone, or that engine collision queries work. Generated-terrain manifests continue
-to report `physicsGenerated: false`; the terrain issue remains open.
+### Native lazy spatial index
+
+Further inspection establishes a supported way to populate the first group without
+guessing the other groups' precise classifications:
+
+- Group-zero decode writes internal marker 0xfe. The serializer at `0x1409e4103`
+  onward writes marker-0xfe regions directly back to the first group.
+- A separate region lookup path at `0x1409e63f0` dispatches marker 0xfe (and 0xff)
+  to `0x1409e6740`. That invokes `0x1409e6120` to reconstruct cached masks from
+  the terrain's voxel-grid object. It is not a stored triangle mesh.
+- Reconstruction multiplies the region coordinates by eight, adds an eight-cell
+  extent, and expands all bounds by one via `0x143e78180` before reading voxels.
+  The mask builder `0x1409de140` distinguishes solid/water/material occupancy;
+  this tool does not replace that on-demand engine operation with guessed masks.
+
+The generator indexes every eight-cell region whose one-cell border can contain a
+non-Air source cell. It writes sorted unique coordinates in group zero and empty
+remaining groups. Air contributes no candidates; both water and solid cells do.
+Explicit budgets bound entries, and coordinate/halo overflow fails. The independent
+fixture's 136 unique first-group coordinates match generated candidates exactly;
+its redundant entries are not duplicated by new generation.
+
+Both wire codecs reproduce the supplied fixture exactly. Generated lazy-index
+bytes also pass native place assembly alongside newly converted voxels/heightmaps.
+This is a native lazy-index profile, **not fully precomputed collision geometry**:
+the traced reader can perform normal on-demand mask work. Static evidence does not
+prove live collision/raycast behavior, nor does it prove that omitting PhysicsGrid
+entirely is equivalent. `engineVerified` remains false and the issue remains open.
 
 [Issue 10](https://github.com/TamedTornado/RobloxAssetLink/issues/10) tracks the
-remaining PhysicsGrid relationship, native-format coverage and acceptance work.
+remaining native-format coverage and engine-acceptance work.
 Rust voxel/heightmap encoding and CLI/bundle integration are implemented for the
 documented version-one profile, with metric dimensions, aliases and resource
 policy supplied as validated external configuration.

@@ -1,5 +1,6 @@
 {
   "kind": "voxels",
+  "physics": { "maxEntries": 256 },
   "config": {
     "metresPerStud": 0.5,
     "voxelSizeMetres": 2,
