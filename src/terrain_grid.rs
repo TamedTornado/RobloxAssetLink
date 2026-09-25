@@ -38,7 +38,7 @@ pub struct Limits {
     pub max_cells: usize,
 }
 
-fn chunk_cells(exponent: u8, limits: &Limits) -> Result<usize> {
+pub(crate) fn chunk_cells(exponent: u8, limits: &Limits) -> Result<usize> {
     if limits.max_chunks == 0 || limits.max_cells == 0 {
         return Err("terrain resource limits must be positive".into());
     }

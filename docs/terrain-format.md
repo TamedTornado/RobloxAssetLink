@@ -53,11 +53,57 @@ Wire structure established from the fixture and the installed reader:
   survives only for material slots >1 with occupancy !=255. The encoder rejects
   inputs that this normalization would discard instead of silently losing data.
 
-The codec intentionally exposes raw material, occupancy and auxiliary bytes.
-It does not guess `Enum.Material` numbers, normalized occupancy rounding, liquid
-semantics, physical resolution or metric conversion. Those belong to the next
-voxel/heightmap adapter and require further evidence. It also does not generate
-PhysicsGrid or pretend newer fragment formats are implemented.
+The wire codec intentionally exposes raw material, occupancy and auxiliary bytes.
+The sparse voxel adapter below supplies the separately established public material
+mapping and normalized occupancy conversion. Mixed solid/liquid auxiliary-channel
+authoring, PhysicsGrid generation and newer fragment formats remain unfinished.
+
+## Metric sparse voxel adapter
+
+`terrain_voxels::build` converts named sparse voxels into the wire grid. Each voxel
+has an integer X/Y/Z cell offset, project material alias and normalized occupancy.
+JSON configuration supplies `metresPerStud`, `voxelSizeMetres`, `originMetres`,
+`alignmentToleranceMetres`, `chunkExponent`, resource `limits`, and a `materials`
+map from project aliases to native names. No LayerOne dimensions or names are
+embedded. Output chunks are sorted, making bytes independent of source ordering.
+
+Native voxel resolution is four studs, as documented by Roblox's
+[terrain overview](https://create.roblox.com/docs/parts/terrain), not an arbitrary
+generator limit. Declared metric voxel size must match that resolution within
+the explicit tolerance. The metric origin must be grid aligned; coordinates use
+Euclidean division/remainders so cells at negative positions enter the right
+chunks. No implicit resampling or origin snapping outside tolerance occurs.
+
+The installed WriteVoxels implementation at `0x1444e06f0` scans the 23-element
+public-enum table at `0x1484f1b80`; the matched index is the native material slot.
+Cross-checking the values against the independent pinned reflection database and
+the [official Material enum](https://create.roblox.com/docs/reference/engine/enums/Material)
+establishes these slots in order:
+
+`Air, Water, Grass, Slate, Concrete, Brick, Sand, WoodPlanks, Rock, Glacier, Snow,
+Sandstone, Mud, Basalt, Ground, CrackedLava, Asphalt, Cobblestone, Ice, LeafyGrass,
+Salt, Limestone, Pavement`.
+
+The native method falls back to slot 2 for other enums; this converter deliberately
+rejects unsupported materials instead of silently turning them into Grass. Empty
+aliases, unknown aliases, duplicate cell positions and coordinate overflow fail.
+
+At `0x1444e0b33`–`0x1444e0b98`, positive occupancy becomes single precision,
+multiplies by 256, subtracts 0.5, truncates and clamps to [0,255]. Constants are
+read from `0x1484f23f0` (256) and `0x1484b4450` (0.5). This is **not** rounding
+`occupancy*255`: 0.5 encodes as 127. Zero occupancy produces an empty cell; a tiny
+positive occupancy can produce raw occupancy zero with a non-Air material.
+Inputs must be finite in [0,1]; Air with nonzero occupancy is rejected. This
+profile authors one material per voxel, including water-only cells, not mixed
+solid/liquid cells or edits merged into existing terrain.
+
+Tests map every table entry independently, check quantization boundaries, metric
+origins, negative chunk boundaries, native X/Z/Y order, deterministic source-order
+independence and configured resource rejection. Reconstructing the independent
+Rojo fixture as sparse Grass/Rock voxels and re-encoding reproduces all original
+bytes. This is stronger than a self-generated roundtrip, but still not live
+rendering/physics acceptance. Heightmap/CLI/bundle conversion and PhysicsGrid
+handling remain to be completed.
 
 ### Installed-reader evidence
 
