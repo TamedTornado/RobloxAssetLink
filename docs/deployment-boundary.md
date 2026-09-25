@@ -1,9 +1,11 @@
 # Preconverted-asset deployment — issue 9
 
-Cloud upload/publication is not implemented yet. Local scene linking is available
+Product CLI cloud upload/publication is not implemented yet. Local scene linking is available
 through [`deploy link-scene`](deployment-linking.md). Offline conversion/build must remain usable
 without credentials, Studio or Roblox servers. A local output is not automatically
-an admissible upload. Nothing has been uploaded or published during this audit.
+an admissible upload. [Live acceptance experiments](cloud-acceptance-2026-09-25.md)
+now establish six native artifact types working after upload, with explicit
+remaining failures and gaps. No game has been published.
 
 ## Published interface gaps
 
@@ -12,12 +14,13 @@ Checked September 25, 2026 against Roblox's
 
 | Local artifact | Documented admission / remaining proof |
 | --- | --- |
-| Native `.mesh` | Mesh uploads are documented for content obtained from Asset Delivery. Acceptance of our independently encoded meshes is not established. |
-| PNG | Listed image input. Admission does not prove unchanged runtime bytes or no further server processing. |
-| DDS / TexturePack XML | Not listed image inputs. No supported direct publication route established. |
-| Ogg Vorbis | Listed audio input; byte-preserving deployment is not established. |
-| VP9/Vorbis WebM | Video uploads list MP4/MOV, not WebM. Substituting source MP4 would abandon the preconverted-output boundary. |
-| RBXM models/animations | Listed inputs, but the guide warns externally edited native files may fail upload or use. Our generated files remain untested. |
+| Native `.mesh` | Our independently encoded v2 and v4.01 files were accepted and loaded through typed MeshParts in Studio. Byte-preserving remote storage is not established. |
+| PNG | Accepted and successfully preloaded in an ImageLabel. This does not prove unchanged runtime bytes or no further server processing. |
+| DDS | The correctly labeled BC4 DDS probe failed with InvalidImage. |
+| TexturePack XML | Accepted and approved using asset type TexturePack, despite omission from the guide's limited table. Remote-linked pack rendering remains unverified. |
+| Ogg Vorbis | Accepted, decoded and reported the expected duration in Studio; byte-preserving deployment is not established. |
+| VP9/Vorbis WebM | The zero-price VP9 WebM probe was blocked by HTTP 403 requiring account ID verification, before format admission. The guide lists MP4/MOV; substituting source MP4 would abandon the preconverted-output boundary. |
+| RBXM models/animations | Our generated model and KeyframeSequence were accepted and loaded with checked hierarchy/dimensions and keyframe/pose data. |
 | Collision and terrain payloads | Embedded into native instances locally, not separate documented upload types. Native container admission alone would not prove their runtime use. |
 
 The guide is not evidence that a forbidden format becomes acceptable just by
