@@ -41,6 +41,7 @@ pub struct Node {
     pub script_source: Option<PathBuf>,
     #[serde(default)]
     pub assets: BTreeMap<String, AssetReference>,
+    pub material: Option<AssetReference>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord)]
@@ -189,6 +190,41 @@ fn insert(
         return Err("DataModel is the implicit root; do not nest it".into());
     }
     let mut builder = InstanceBuilder::new(node.class.as_str()).with_name(&node.name);
+    if let Some(material) = &node.material {
+        if node.class != "MeshPart"
+            || node
+                .children
+                .iter()
+                .any(|child| child.class == "SurfaceAppearance")
+        {
+            return Err(
+                "material attachment requires a MeshPart without another SurfaceAppearance".into(),
+            );
+        }
+        let asset = assets
+            .get(material)
+            .ok_or_else(|| format!("missing local material binding: {material:?}"))?;
+        let native = rbx_binary::from_reader(fs::File::open(&asset.path)?)?;
+        if native.root().children().len() != 1 {
+            return Err("material artifact must contain exactly one SurfaceAppearance".into());
+        }
+        let appearance = native
+            .get_by_ref(native.root().children()[0])
+            .ok_or("missing material root")?;
+        if appearance.class.as_str() != "SurfaceAppearance" || !appearance.children().is_empty() {
+            return Err("material artifact must contain a childless SurfaceAppearance".into());
+        }
+        builder = builder.with_child(
+            InstanceBuilder::new("SurfaceAppearance")
+                .with_name(&appearance.name)
+                .with_properties(
+                    appearance
+                        .properties
+                        .iter()
+                        .map(|(name, value)| (*name, value.clone())),
+                ),
+        );
+    }
     for (name, value) in &node.properties {
         if name == "Name"
             || name == "Parent"

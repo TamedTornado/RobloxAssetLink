@@ -53,7 +53,9 @@ of the output directory. It is not a filesystem path or an automatic Roblox
 content installation. Map references are serialized with this prefix; moving
 outputs requires relinking. Only safe local URI segments are accepted. The
 command never uploads, installs content into Studio or manufactures remote IDs.
-Bundle integration and automatic source-material extraction remain outstanding.
+In a bundle, the linker replaces this standalone prefix with the asset's actual
+bundle-local directory before native serialization; the source JSON is unchanged.
+Automatic source-material extraction remains outstanding.
 
 Tests independently decode the native instance properties, check exact channel
 values, compare repeated CLI outputs byte-for-byte, and cover conflicting maps,

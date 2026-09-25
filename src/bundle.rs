@@ -25,6 +25,9 @@ pub struct Asset {
 #[derive(Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 pub enum Conversion {
+    Material {
+        source: PathBuf,
+    },
     AnimationFbx {
         source: PathBuf,
         config: crate::animation_fbx::Config,
@@ -107,8 +110,15 @@ fn key(id: &str) -> String {
     format!("{:x}", Sha256::digest(id.as_bytes()))
 }
 
-fn build_asset(root: &Path, output: &Path, asset: &Asset) -> Result<Vec<String>> {
+fn build_asset(root: &Path, output: &Path, asset: &Asset, uri_prefix: &str) -> Result<Vec<String>> {
     match &asset.conversion {
+        Conversion::Material { source } => {
+            let manifest =
+                crate::material::convert_linked(&local(root, source)?, output, Some(uri_prefix))?;
+            let mut files = vec!["material.rbxm".to_owned()];
+            files.extend(manifest.maps.into_values().map(|map| map.file));
+            Ok(files)
+        }
         Conversion::AnimationFbx { source, config } => {
             fs::create_dir(output)?;
             let manifest = crate::animation_fbx::convert(
@@ -213,7 +223,12 @@ pub fn build(source: &Path, output: &Path) -> Result<Manifest> {
         let mut files = Vec::new();
         for asset in &plan.assets {
             let directory = format!("assets/{}", key(&asset.id));
-            let generated = build_asset(root, &output.join(&directory), asset)?;
+            let generated = build_asset(
+                root,
+                &output.join(&directory),
+                asset,
+                &format!("rbxasset://{directory}/"),
+            )?;
             for file in generated {
                 let path = format!("{directory}/{file}");
                 let local_uri = format!("rbxasset://{path}");

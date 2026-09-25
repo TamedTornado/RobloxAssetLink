@@ -33,10 +33,12 @@ LayerOne names or conventions.
 
 ## Outstanding integration and reproducibility work
 
-The current command does not automatically turn a conversion manifest into
-MeshParts or bind collision data, pivots, materials or terrain. Those are still
-issue 7 work; plain instance serialization alone does not close it. Likewise,
-no remote asset ids are generated here and no game is published.
+Bundle assembly supports explicit mesh/collision/texture bindings and native
+material attachment; see [offline bundles](offline-bundles.md). It does not yet
+automatically turn a geometry conversion manifest into properly sized/pivoted
+MeshParts or assemble terrain and rigs. Those remain issue 7 work; plain instance
+serialization alone does not close it. No remote asset ids are generated here
+and no game is published.
 
 Serialization uses the pinned bundled reflection database. The dependency's
 `debug_always_use_bundled` Cargo feature bypasses local lookup in both debug and

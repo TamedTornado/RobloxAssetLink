@@ -12,6 +12,23 @@ profile described in [animation conversion](animation-format.md).
 the source-node/bind hierarchy in its conversion manifest.
 Scene sources use the existing typed scene format and compiler gate.
 
+`material` accepts a `source` material JSON document as described in
+[texture/material conversion](texture-conversion.md). It emits a native
+SurfaceAppearance and all referenced normalized maps. The bundle linker replaces
+the standalone document's URI prefix with the actual bundle asset directory
+before serializing the material. Maps appear individually in the top-level
+artifact manifest so deployment can resolve every dependency.
+
+A MeshPart scene node may specify
+`"material": {"asset":"paint","file":"material.rbxm"}` to attach that native
+SurfaceAppearance as a child. This is not a URL assigned to a property: the
+builder reads and embeds the native instance, preserving its properties and
+already-linked map references. Other parent classes, multiple material roots,
+non-SurfaceAppearance artifacts, nested children and an additional explicit
+SurfaceAppearance child are rejected. This does not import arbitrary native
+models or execute scripts. The material attachment has no separately addressable
+scene id; use an explicit scene child when other nodes must reference it.
+
 Input paths are relative to the plan directory. Absolute paths, source escapes,
 duplicate ids, missing dependencies and existing output directories fail. Logical
 ids are not filesystem paths: output directories use their SHA-256 digests, so

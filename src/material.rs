@@ -84,8 +84,25 @@ fn validate(spec: &Specification) -> Result<Enum> {
 }
 
 pub fn convert(source: &Path, output: &Path) -> Result<Manifest> {
+    convert_linked(source, output, None)
+}
+
+/// Bundle assembly owns the final content location and relinks before encoding.
+pub(crate) fn convert_linked(
+    source: &Path,
+    output: &Path,
+    prefix: Option<&str>,
+) -> Result<Manifest> {
     let spec: Specification = serde_json::from_slice(&fs::read(source)?)?;
     let alpha = validate(&spec)?;
+    let spec = match prefix {
+        Some(prefix) => Specification {
+            local_uri_prefix: prefix.to_owned(),
+            ..spec
+        },
+        None => spec,
+    };
+    validate(&spec)?;
     let root = source
         .canonicalize()?
         .parent()
