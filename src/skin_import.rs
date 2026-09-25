@@ -1,6 +1,6 @@
 //! Unified source skin conversion and native bundle output contract.
 use crate::{IDENTITY, Result, convert, skin};
-use glam::{Mat4, Vec4};
+use glam::Mat4;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{
@@ -67,31 +67,10 @@ pub(crate) fn validate_config(config: &Config) -> Result<()> {
 }
 
 pub(crate) fn cframe(matrix: Mat4, config: &Config) -> Result<[f32; 12]> {
-    let tolerance = config.rigid_tolerance;
+    crate::rigid::validate(matrix, config.rigid_tolerance)?;
     let x = matrix.x_axis.truncate();
     let y = matrix.y_axis.truncate();
     let z = matrix.z_axis.truncate();
-    let bottom = Vec4::new(
-        matrix.x_axis.w,
-        matrix.y_axis.w,
-        matrix.z_axis.w,
-        matrix.w_axis.w,
-    );
-    if !matrix.is_finite()
-        || !bottom.abs_diff_eq(Vec4::W, tolerance)
-        || (x.length_squared() - 1.).abs() > tolerance
-        || (y.length_squared() - 1.).abs() > tolerance
-        || (z.length_squared() - 1.).abs() > tolerance
-        || x.dot(y).abs() > tolerance
-        || x.dot(z).abs() > tolerance
-        || y.dot(z).abs() > tolerance
-        || (x.cross(y).dot(z) - 1.).abs() > tolerance
-    {
-        return Err(
-            "skin bind matrices must be finite rigid transforms without scale, shear or reflection"
-                .into(),
-        );
-    }
     let position = matrix.w_axis.truncate() / config.metres_per_stud;
     if !position.is_finite() {
         return Err("skin bind translation overflows selected units".into());

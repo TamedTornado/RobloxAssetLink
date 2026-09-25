@@ -2,6 +2,7 @@
   "animationIndex": 0,
   "rootNode": 0,
   "metresPerStud": 0.28,
+  "rigidTolerance": 0.00001,
   "name": "Motion",
   "looped": true,
   "priority": "Action"

@@ -35,32 +35,48 @@ no-overwrite behavior and failed-build cleanup.
 `roblox convert animation-gltf motion.glb --config animation.json --output motion.rbxm`
 imports rigid LINEAR translation/rotation tracks. A bundle can use conversion
 kind `animationGltf` with the same source/config. Configuration explicitly gives
-`animationIndex`, `rootNode`, `metresPerStud`, `name`, `looped` and `priority`.
+`animationIndex`, `rootNode`, `metresPerStud`, `rigidTolerance`, `name`, `looped`
+and `priority`. The required tolerance controls numerical admission of rigid
+matrices, unit quaternions and identity-scale roundoff; it is not a hidden limit.
 No frame-rate or resource limit is invented: the timeline is the sorted union
 of source key times, preserving seconds. Translation uses linear interpolation;
 rotation uses normalized, shortest-path quaternion SLERP. Track endpoints clamp
 outside their own time range. This preserves the supported source curves without
 introducing a fixed-rate sampling policy.
 
-The selected subtree must contain uniquely named joints with unscaled TRS rest
-transforms. Every selected clip channel must belong to it. No source nodes are
+The selected subtree must contain uniquely named joints with rigid TRS or matrix
+rest transforms. Every selected clip channel must belong to it. No source nodes are
 silently removed or retargeted. Source right-handed Y-up coordinates are retained;
 metres become studs at the boundary. Each output pose is
 `inverse(localRest) * localAnimated`, not the absolute source transform. The
 result manifest records node indices, parents, names and local rest CFrames for
 binding against a target Bone hierarchy. The target must use that hierarchy/rest
-data; an arbitrary existing rig is not automatically compatible.
+data; an arbitrary existing rig is not automatically compatible. `rigSha256`
+identifies the serialized rig metadata for stable dependency tracking; it does
+not assert that an independently built target rig has been checked against it.
 
-The importer rejects STEP/CUBICSPLINE, scale/morph channels, matrix rest
-transforms, extensions, malformed times/rotations, ambiguous joint names,
+The importer rejects STEP/CUBICSPLINE, non-identity scale/morph animation,
+non-rigid rest transforms, extensions, malformed times/rotations, ambiguous joint names,
 out-of-rig channels and remote/escaped buffers. glTF has no standard clip event
 marker field; canonical JSON supports explicit markers separately. It does not
 create MeshParts/Bones or bind skin weights yet.
+
+Scale channels whose samples are all identity within the configured numerical
+tolerance are preserved as timeline samples without introducing scale. This
+handles exporter roundoff, not actual scale animation. Matrix and TRS admission
+share the same rigidity checks with skin bind conversion, rejecting shear,
+reflection, perspective and non-finite values.
 
 Tests use a hand-authored metric fixture with a rotated rest pose and mismatched
 translation/rotation key times. They check midpoint SLERP, rest-relative offsets,
 hierarchy, GLB/external-buffer equivalence, native CFrame decoding, CLI/bundle
 equivalence and rejection paths. These checks are not playback acceptance.
+
+The unchanged licensed Khronos/Cesium Rigged Simple fixture also exercises a
+matrix rest pose and near-identity scale keys. Every one of its 50 native decoded
+frames is reconstructed as `rest * pose` and compared with the independent source
+translation/rotation samples. Tests verify strict/non-default tolerance behavior
+and repeatable rig/artifact hashes.
 
 Semantics follow the [glTF animation specification](https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html#animations)
 and [Bone transform documentation](https://create.roblox.com/docs/reference/engine/classes/Bone).

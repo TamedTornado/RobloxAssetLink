@@ -4,9 +4,10 @@ use crate::{
     animation::{self, Clip, Frame, Pose},
     convert::load_gltf_buffers,
 };
-use glam::{Mat3, Quat, Vec3};
+use glam::{Mat3, Mat4, Quat, Vec3};
 use gltf::animation::{Interpolation, util::ReadOutputs};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::{
     collections::{BTreeMap, HashSet},
     fs,
@@ -19,6 +20,7 @@ pub struct Config {
     pub animation_index: usize,
     pub root_node: usize,
     pub metres_per_stud: f32,
+    pub rigid_tolerance: f32,
     pub name: String,
     pub looped: bool,
     pub priority: String,
@@ -39,6 +41,7 @@ pub struct Manifest {
     pub artifact: animation::Manifest,
     pub config: Config,
     pub rig: Vec<Binding>,
+    pub rig_sha256: String,
 }
 
 struct Joint {
@@ -50,6 +53,7 @@ struct Joint {
 }
 
 enum Values {
+    IdentityScale,
     Translation(Vec<Vec3>),
     Rotation(Vec<Quat>),
 }
@@ -60,9 +64,9 @@ struct Track {
     values: Values,
 }
 
-fn quaternion(value: [f32; 4]) -> Result<Quat> {
+fn quaternion(value: [f32; 4], tolerance: f32) -> Result<Quat> {
     let value = Quat::from_array(value);
-    if !value.is_finite() || !value.is_normalized() {
+    if !value.is_finite() || (value.length_squared() - 1.).abs() > tolerance {
         return Err("animation rotations must be finite unit quaternions".into());
     }
     Ok(value.normalize())
@@ -86,7 +90,12 @@ fn cframe(rotation: Quat, translation: Vec3) -> [f32; 12] {
     ]
 }
 
-fn skeleton(document: &gltf::Document, root: usize, scale: f32) -> Result<BTreeMap<usize, Joint>> {
+fn skeleton(
+    document: &gltf::Document,
+    root: usize,
+    scale: f32,
+    tolerance: f32,
+) -> Result<BTreeMap<usize, Joint>> {
     let root = document
         .nodes()
         .nth(root)
@@ -107,23 +116,17 @@ fn skeleton(document: &gltf::Document, root: usize, scale: f32) -> Result<BTreeM
                 "animation subtree requires uniquely named joints without meshes/cameras".into(),
             );
         }
-        let gltf::scene::Transform::Decomposed {
-            translation,
-            rotation,
-            scale: node_scale,
-        } = node.transform()
-        else {
-            return Err("animation joints require explicit TRS transforms, not matrices".into());
-        };
-        if node_scale != [1.; 3] || translation.iter().any(|v| !v.is_finite()) {
-            return Err("animation joint rest transforms must be finite and unscaled".into());
+        if let gltf::scene::Transform::Decomposed { rotation, .. } = node.transform() {
+            quaternion(rotation, tolerance)?;
         }
+        let matrix = Mat4::from_cols_array_2d(&node.transform().matrix());
+        crate::rigid::validate(matrix, tolerance)?;
         let joint = Joint {
             name: name.to_owned(),
             parent,
             children: node.children().map(|child| child.index()).collect(),
-            translation: Vec3::from_array(translation) / scale,
-            rotation: quaternion(rotation)?,
+            translation: matrix.w_axis.truncate() / scale,
+            rotation: Quat::from_mat4(&matrix).normalize(),
         };
         pending.extend(node.children().map(|child| (child, Some(node.index()))));
         joints.insert(node.index(), joint);
@@ -136,6 +139,7 @@ fn tracks(
     buffers: &[Vec<u8>],
     joints: &BTreeMap<usize, Joint>,
     scale: f32,
+    tolerance: f32,
 ) -> Result<Vec<Track>> {
     let mut tracks = Vec::new();
     let mut targets = HashSet::new();
@@ -172,13 +176,28 @@ fn tracks(
                 ("translation", Values::Translation(values))
             }
             ReadOutputs::Rotations(values) => {
-                let values: Vec<_> = values.into_f32().map(quaternion).collect::<Result<_>>()?;
+                let values: Vec<_> = values
+                    .into_f32()
+                    .map(|value| quaternion(value, tolerance))
+                    .collect::<Result<_>>()?;
                 if values.len() != times.len() {
                     return Err("animation rotation sample count mismatch".into());
                 }
                 ("rotation", Values::Rotation(values))
             }
-            _ => {
+            ReadOutputs::Scales(values) => {
+                let values: Vec<_> = values.collect();
+                if values.len() != times.len()
+                    || values.iter().any(|value| {
+                        !Vec3::from_array(*value).is_finite()
+                            || !Vec3::from_array(*value).abs_diff_eq(Vec3::ONE, tolerance)
+                    })
+                {
+                    return Err("scale and morph animation cannot be represented by this rigid pose profile".into());
+                }
+                ("scale", Values::IdentityScale)
+            }
+            ReadOutputs::MorphTargetWeights(_) => {
                 return Err(
                     "scale and morph animation cannot be represented by this rigid pose profile"
                         .into(),
@@ -223,6 +242,7 @@ fn pose(index: usize, joints: &BTreeMap<usize, Joint>, tracks: &[Track], time: f
     for track in tracks.iter().filter(|track| track.node == index) {
         let (a, b, t) = interval(&track.times, time);
         match &track.values {
+            Values::IdentityScale => {}
             Values::Translation(values) => translation = values[a].lerp(values[b], t),
             Values::Rotation(values) => rotation = values[a].slerp(values[b], t).normalize(),
         }
@@ -247,6 +267,7 @@ fn pose(index: usize, joints: &BTreeMap<usize, Joint>, tracks: &[Track], time: f
 }
 
 pub fn read(source: &Path, config: &Config) -> Result<(Clip, Vec<Binding>)> {
+    crate::rigid::validate(Mat4::IDENTITY, config.rigid_tolerance)?;
     if !config.metres_per_stud.is_finite() || config.metres_per_stud <= 0. {
         return Err("metresPerStud must be finite and positive".into());
     }
@@ -255,12 +276,23 @@ pub fn read(source: &Path, config: &Config) -> Result<(Clip, Vec<Binding>)> {
         return Err("animation glTF extensions are not supported".into());
     }
     let buffers = load_gltf_buffers(source, &gltf)?;
-    let joints = skeleton(&gltf.document, config.root_node, config.metres_per_stud)?;
+    let joints = skeleton(
+        &gltf.document,
+        config.root_node,
+        config.metres_per_stud,
+        config.rigid_tolerance,
+    )?;
     let animation = gltf
         .animations()
         .nth(config.animation_index)
         .ok_or("animationIndex is absent")?;
-    let tracks = tracks(animation, &buffers, &joints, config.metres_per_stud)?;
+    let tracks = tracks(
+        animation,
+        &buffers,
+        &joints,
+        config.metres_per_stud,
+        config.rigid_tolerance,
+    )?;
     let mut times: Vec<_> = tracks
         .iter()
         .flat_map(|track| track.times.iter().copied())
@@ -298,10 +330,12 @@ pub fn read(source: &Path, config: &Config) -> Result<(Clip, Vec<Binding>)> {
 
 pub fn convert(source: &Path, output: &Path, config: Config) -> Result<Manifest> {
     let (clip, rig) = read(source, &config)?;
+    let rig_sha256 = format!("{:x}", Sha256::digest(serde_json::to_vec(&rig)?));
     let artifact = animation::write_clip(&fs::read(source)?, &clip, output)?;
     Ok(Manifest {
         artifact,
         config,
         rig,
+        rig_sha256,
     })
 }

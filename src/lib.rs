@@ -12,6 +12,7 @@ mod collision_format;
 pub mod config;
 pub mod convert;
 pub mod mesh;
+mod rigid;
 pub mod scene;
 pub mod scripts;
 pub mod skin;

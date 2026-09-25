@@ -7,6 +7,7 @@ fn config() -> Config {
         animation_index: 0,
         root_node: 0,
         metres_per_stud: 0.5,
+        rigid_tolerance: 0.00001,
         name: "Motion".into(),
         looped: true,
         priority: "Action".into(),
@@ -52,6 +53,117 @@ fn near(actual: f32, expected: f32) {
         (actual - expected).abs() < 0.00001,
         "{actual} != {expected}"
     );
+}
+
+fn transform(value: [f32; 12]) -> glam::Mat4 {
+    glam::Mat4::from_cols_array(&[
+        value[0], value[3], value[6], 0., value[1], value[4], value[7], 0., value[2], value[5],
+        value[8], 0., value[9], value[10], value[11], 1.,
+    ])
+}
+
+#[test]
+fn unchanged_khronos_clip_reconstructs_source_motion_after_native_round_trip() {
+    use glam::{Mat4, Quat, Vec3};
+    use gltf::animation::util::ReadOutputs;
+    use rbx_dom_weak::types::Variant;
+
+    let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/rigged-simple.glb");
+    let mut policy = config();
+    policy.root_node = 3;
+    let (clip, rig) = animation_gltf::read(&source, &policy).unwrap();
+    let gltf = gltf::Gltf::from_slice(&fs::read(&source).unwrap()).unwrap();
+    let mut translations = Vec::new();
+    let mut rotations = Vec::new();
+    let mut times = Vec::new();
+    for channel in gltf.animations().next().unwrap().channels() {
+        let reader = channel.reader(|_| gltf.blob.as_deref());
+        match reader.read_outputs().unwrap() {
+            ReadOutputs::Translations(values) => {
+                translations = values.collect::<Vec<_>>();
+                times = reader.read_inputs().unwrap().collect::<Vec<_>>();
+            }
+            ReadOutputs::Rotations(values) => rotations = values.into_f32().collect::<Vec<_>>(),
+            _ => {}
+        }
+    }
+    assert_eq!(clip.frames.len(), 50);
+    assert_eq!(times.len(), clip.frames.len());
+    assert_eq!(rotations.len(), clip.frames.len());
+    assert_eq!(rig[0].node_index, 3);
+    assert_eq!(rig[1].parent_node, Some(3));
+    let directory = tempfile::tempdir().unwrap();
+    let output = directory.path().join("motion.rbxm");
+    let manifest = animation_gltf::convert(&source, &output, policy.clone()).unwrap();
+    let bytes = fs::read(output).unwrap();
+    let dom = rbx_binary::from_reader(bytes.as_slice()).unwrap();
+    let sequence = dom.get_by_ref(dom.root().children()[0]).unwrap();
+    assert_eq!(sequence.children().len(), 50);
+    for (index, frame) in sequence.children().iter().enumerate() {
+        let frame = dom.get_by_ref(*frame).unwrap();
+        assert_eq!(
+            frame.properties[&"Time".into()],
+            Variant::Float32(times[index])
+        );
+        let root = dom.get_by_ref(frame.children()[0]).unwrap();
+        let child = dom.get_by_ref(root.children()[0]).unwrap();
+        assert_eq!(child.name, "Bone.001");
+        let Variant::CFrame(pose) = &child.properties[&"CFrame".into()] else {
+            panic!("missing pose");
+        };
+        let r = pose.orientation;
+        let p = pose.position;
+        let pose = transform([
+            r.x.x, r.x.y, r.x.z, r.y.x, r.y.y, r.y.z, r.z.x, r.z.y, r.z.z, p.x, p.y, p.z,
+        ]);
+        let reconstructed = transform(rig[1].rest_cframe) * pose;
+        let expected = Mat4::from_rotation_translation(
+            Quat::from_array(rotations[index]).normalize(),
+            Vec3::from_array(translations[index]) / policy.metres_per_stud,
+        );
+        assert!(reconstructed.abs_diff_eq(expected, policy.rigid_tolerance));
+    }
+    let second =
+        animation_gltf::convert(&source, &directory.path().join("second.rbxm"), policy).unwrap();
+    assert_eq!(manifest.rig_sha256, second.rig_sha256);
+    assert_eq!(manifest.artifact.sha256, second.artifact.sha256);
+}
+
+#[test]
+fn configured_tolerance_accepts_only_identity_scale_roundoff() {
+    let directory = tempfile::tempdir().unwrap();
+    let root = directory.path();
+    let mut document = fixture(root);
+    document["animations"][0]["channels"][0]["target"]["path"] = "scale".into();
+    let source = root.join("scale.gltf");
+    fs::write(&source, serde_json::to_vec(&document).unwrap()).unwrap();
+    let mut buffer = fs::read(root.join("motion.bin")).unwrap();
+    for chunk in buffer[12..48].chunks_exact_mut(4) {
+        chunk.copy_from_slice(&1.0001f32.to_le_bytes());
+    }
+    fs::write(root.join("motion.bin"), buffer).unwrap();
+    let mut policy = config();
+    policy.rigid_tolerance = 0.001;
+    let (clip, _) = animation_gltf::read(&source, &policy).unwrap();
+    assert_eq!(clip.frames.len(), 3);
+    policy.rigid_tolerance = 0.000001;
+    assert!(
+        animation_gltf::read(&source, &policy)
+            .err()
+            .unwrap()
+            .to_string()
+            .contains("scale and morph")
+    );
+    for tolerance in [0., -1., 1., f32::NAN] {
+        policy.rigid_tolerance = tolerance;
+        assert!(
+            animation_gltf::read(&source, &policy)
+                .err()
+                .unwrap()
+                .to_string()
+                .contains("rigidTolerance")
+        );
+    }
 }
 
 #[test]
@@ -172,7 +284,7 @@ fn unsupported_and_malformed_source_semantics_fail_explicitly() {
     zero_rotation["nodes"][0]["rotation"] = json!([0., 0., 0., 0.]);
     for (value, expected) in [
         (step, "LINEAR"),
-        (scale, "unscaled"),
+        (scale, "rigid transforms"),
         (duplicate, "uniquely named"),
         (remote, "network access"),
         (scaled_animation, "scale and morph"),
