@@ -120,7 +120,27 @@ pub fn link_scene(
     if digest(&bytes) != scene.sha256 {
         return Err("scene changed during linking".into());
     }
-    let mut dom = rbx_binary::from_reader(bytes.as_slice())?;
+    let (bytes, references_linked) = rewrite_native(&bytes, &resolved)?;
+    let mut temporary = tempfile::NamedTempFile::new_in(parent)?;
+    std::io::Write::write_all(&mut temporary, &bytes)?;
+    temporary.as_file().sync_all()?;
+    temporary.persist_noclobber(output)?;
+    Ok(LinkedScene {
+        bundle_manifest_sha256: verification.manifest_sha256,
+        source_scene_sha256: scene.sha256.clone(),
+        output_sha256: digest(&bytes),
+        references_linked,
+        published: false,
+        remote_ids_verified: false,
+        engine_verified: false,
+    })
+}
+
+pub(crate) fn rewrite_native(
+    bytes: &[u8],
+    resolved: &HashMap<String, String>,
+) -> Result<(Vec<u8>, usize)> {
+    let mut dom = rbx_binary::from_reader(bytes)?;
     let nodes: Vec<_> = dom.descendants().map(|node| node.referent()).collect();
     let mut references_linked = 0;
     for node in nodes {
@@ -155,17 +175,5 @@ pub fn link_scene(
     }
     let mut bytes = Vec::new();
     rbx_binary::to_writer(&mut bytes, &dom, dom.root().children())?;
-    let mut temporary = tempfile::NamedTempFile::new_in(parent)?;
-    std::io::Write::write_all(&mut temporary, &bytes)?;
-    temporary.as_file().sync_all()?;
-    temporary.persist_noclobber(output)?;
-    Ok(LinkedScene {
-        bundle_manifest_sha256: verification.manifest_sha256,
-        source_scene_sha256: scene.sha256.clone(),
-        output_sha256: digest(&bytes),
-        references_linked,
-        published: false,
-        remote_ids_verified: false,
-        engine_verified: false,
-    })
+    Ok((bytes, references_linked))
 }

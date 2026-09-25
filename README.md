@@ -5,7 +5,7 @@ Rust. Public repository: [TamedTornado/RobloxToolchain](https://github.com/Tamed
 quality choices and resource budgets are configured in JSON, not tied to one game.
 
 Builds require no Studio, Roblox credentials or Roblox servers. Deployment is a
-separate, unfinished stage. A valid local bundle is not proof of engine playback,
+separate, explicit CLI stage. A valid local bundle is not proof of engine playback,
 rendering, collision behavior or cloud acceptance.
 
 ## Build and use
@@ -22,6 +22,18 @@ Deployment remains separate from offline builds. The credential-free
 [`deploy link-scene` command](docs/deployment-linking.md) resolves prebuilt native
 scene references to explicit, hash-pinned remote-ID mappings. It does not upload,
 publish, or claim those caller-supplied IDs have been verified remotely.
+
+The [deployment CLI](docs/deployment-cli.md) now uploads prebuilt dependencies,
+links remote IDs and publishes to an explicitly configured destination:
+
+```sh
+roblox deploy publish game-bundle --config deployment.json --state .roblox-deploy
+roblox deploy status --state .roblox-deploy
+```
+
+Reuse the state directory across rebuilds for content-keyed upload receipts,
+safe resumption and exact published-version download verification. Every asset
+upload is zero-price-only. Offline builds still require no network or credentials.
 
 The executable is `roblox`. Commands return structured JSON, with JSON errors on
 stderr and nonzero failure exits. New output directories must not already exist.

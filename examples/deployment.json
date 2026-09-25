@@ -1,0 +1,21 @@
+{
+  "apiBaseUrl": "https://apis.roblox.com/",
+  "apiKeyFile": "../secrets/roblox-key",
+  "creator": { "userId": "12345" },
+  "universeId": "23456",
+  "placeId": "34567",
+  "scene": "game",
+  "policy": {
+    "requestTimeoutSeconds": 60,
+    "waitTimeoutSeconds": 300,
+    "pollIntervalMillis": 2000,
+    "readAttempts": 3,
+    "maxResponseBytes": 33554432,
+    "maxUploadBytes": 20000000
+  },
+  "uploads": [
+    { "asset": "geometry", "file": "node-1-primitive-0.mesh", "assetType": "Mesh", "displayName": "Example geometry", "description": "Prebuilt native mesh." },
+    { "asset": "material", "file": "map-0/color.png", "assetType": "Image", "displayName": "Example color", "description": "Prebuilt color map." },
+    { "asset": "material", "file": "texturepack.xml", "assetType": "TexturePack", "displayName": "Example material", "description": "Descriptor referring to uploaded maps." }
+  ]
+}
