@@ -55,7 +55,8 @@ outputs requires relinking. Only safe local URI segments are accepted. The
 command never uploads, installs content into Studio or manufactures remote IDs.
 In a bundle, the linker replaces this standalone prefix with the asset's actual
 bundle-local directory before native serialization; the source JSON is unchanged.
-Automatic source-material extraction remains outstanding.
+Core glTF source-material extraction is described below; FBX material extraction
+and automatic material-to-source-geometry association remain outstanding.
 
 Tests independently decode the native instance properties, check exact channel
 values, compare repeated CLI outputs byte-for-byte, and cover conflicting maps,
@@ -63,6 +64,41 @@ invalid enums, paths, non-grayscale scalar inputs, configured decode limits,
 rollback and no-overwrite behavior. `engineVerified` remains false: native
 serialization correctness is not proof that the renderer accepts raw map
 references without additional TexturePack/cache processing.
+
+## glTF/GLB source material import
+
+`roblox convert material-gltf SOURCE --config CONFIG --output NEW_DIRECTORY`
+extracts one selected core metallic/roughness material. Configuration requires
+`materialIndex`, `name`, `localUriPrefix`, `maxWidth`, `maxHeight` and
+`maxDecodedBytes`. Bundle conversion kind `materialGltf` accepts the same source
+and config, relinks dependencies, and supports the same scene material attachment.
+
+Following the [glTF material specification](https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html#materials),
+base RGB samples are decoded from sRGB, multiplied by linear base-color factors,
+then encoded back to 8-bit sRGB. Alpha is multiplied without gamma conversion;
+OPAQUE forces full coverage and BLEND preserves the multiplied coverage. Native
+Transparency mode is used with the resulting alpha map. Roughness/metalness use
+G/B samples multiplied by their factors, without gamma conversion. Missing maps
+produce constant 1×1 textures. Each bake rounds to 8-bit; it is not lossless for
+arbitrary floating-point factors. Native Color is white to avoid a second tint.
+OpenGL normal RGB samples are preserved independently of the base-color factors.
+
+External local images, PNG/JPEG base64 data URIs and GLB buffer-view images work
+without network access. Decode policies and ICC/HDR/orientation rejection are
+shared with texture conversion. Image paths cannot escape the source directory.
+Temporary intermediates are automatically removed; source files are untouched.
+
+Unsupported semantics fail: material extensions, occlusion/emission, alpha MASK,
+double-sided geometry, non-UV0 bindings, nonunit normal scale, nonrepeat wrapping
+and non-linear sampler settings. There is no implicit shader approximation or
+UV-set reassignment. Double-sidedness and vertex-color multiplication require
+geometry integration; importing this material alone does not build its source
+mesh, and the existing mesh importer still rejects textured source materials.
+
+Tests cover exact known factor results (including gamma-sensitive values), alpha,
+normal samples, image encodings, malformed/unsupported inputs, configured limits,
+repeatability, CLI and bundle references, plus the independently authored
+Khronos RiggedSimple material fixture. These do not prove renderer parity.
 
 ## Installed executable: TexturePack is not itself a pixel codec
 

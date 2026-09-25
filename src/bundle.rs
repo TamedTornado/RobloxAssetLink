@@ -25,6 +25,10 @@ pub struct Asset {
 #[derive(Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 pub enum Conversion {
+    MaterialGltf {
+        source: PathBuf,
+        config: crate::material_gltf::Config,
+    },
     Material {
         source: PathBuf,
     },
@@ -112,6 +116,17 @@ fn key(id: &str) -> String {
 
 fn build_asset(root: &Path, output: &Path, asset: &Asset, uri_prefix: &str) -> Result<Vec<String>> {
     match &asset.conversion {
+        Conversion::MaterialGltf { source, config } => {
+            let manifest = crate::material_gltf::convert_linked(
+                &local(root, source)?,
+                output,
+                config,
+                Some(uri_prefix),
+            )?;
+            let mut files = vec!["material.rbxm".to_owned()];
+            files.extend(manifest.maps.into_values().map(|map| map.file));
+            Ok(files)
+        }
         Conversion::Material { source } => {
             let manifest =
                 crate::material::convert_linked(&local(root, source)?, output, Some(uri_prefix))?;

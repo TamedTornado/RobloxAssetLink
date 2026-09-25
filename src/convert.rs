@@ -310,6 +310,10 @@ fn read_buffer(root: &Path, uri: &str) -> Result<Vec<u8>> {
         }
         return Ok(base64::engine::general_purpose::STANDARD.decode(content)?);
     }
+    read_local_uri(root, uri)
+}
+
+pub(crate) fn read_local_uri(root: &Path, uri: &str) -> Result<Vec<u8>> {
     let path = percent_encoding::percent_decode_str(uri).decode_utf8()?;
     if path.contains([':', '\\', '?', '#', '\0']) || Path::new(path.as_ref()).is_absolute() {
         return Err("buffer URI must be a local relative path; network access is forbidden".into());

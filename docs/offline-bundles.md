@@ -18,6 +18,9 @@ SurfaceAppearance and all referenced normalized maps. The bundle linker replaces
 the standalone document's URI prefix with the actual bundle asset directory
 before serializing the material. Maps appear individually in the top-level
 artifact manifest so deployment can resolve every dependency.
+`materialGltf` performs source GLB/glTF material extraction with explicit material
+index and decode configuration before the same linking/attachment stage. See the
+material documentation for supported core PBR semantics and rejection boundaries.
 
 A MeshPart scene node may specify
 `"material": {"asset":"paint","file":"material.rbxm"}` to attach that native
