@@ -38,7 +38,7 @@ enum Command {
 
 #[derive(Subcommand)]
 enum Convert {
-    /// Encode source geometry as native Roblox meshes (currently static GLB).
+    /// Encode static GLB, FBX or OBJ geometry as native Roblox meshes.
     Mesh {
         source: PathBuf,
         #[arg(long)]
@@ -108,7 +108,7 @@ fn execute(cli: Cli) -> Result<Value> {
     else {
         return Ok(json!({"ok":true,"result":{
             "commandGroups":["assets","convert"],"assetOperations":["init","add","edit","remove","list","inspect","validate","config"],
-            "offlineConversion":["static-glb-to-mesh-v2"],"offlineGameBuild":false,
+            "offlineConversion":["static-glb-to-mesh-v2","static-fbx-to-mesh-v2","static-obj-to-mesh-v2"],"offlineGameBuild":false,
             "serverExecutable":"roblox-server","requiresStudioForCatalog":false,
             "persistentStudioImport":false,"studioCommandExecution":false
         }}));

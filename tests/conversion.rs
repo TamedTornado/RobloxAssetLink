@@ -10,11 +10,86 @@ fn f32_at(bytes: &[u8], offset: usize) -> f32 {
     f32::from_le_bytes(bytes[offset..offset + 4].try_into().unwrap())
 }
 
+fn triangle_corners(bytes: &[u8]) -> Vec<[f32; 8]> {
+    let face_start = 25 + u32_at(bytes, 17) * 40;
+    (face_start..bytes.len())
+        .step_by(4)
+        .map(|offset| {
+            let vertex = 25 + u32_at(bytes, offset) * 40;
+            std::array::from_fn(|i| f32_at(bytes, vertex + i * 4))
+        })
+        .collect()
+}
+
+#[test]
+fn fbx_and_glb_match_geometry_normals_and_uvs() {
+    let temporary = tempfile::tempdir().unwrap();
+    let config = Config {
+        metres_per_stud: 0.28,
+        obj_metres_per_unit: None,
+    };
+    let glb_path = temporary.path().join("glb");
+    let fbx_path = temporary.path().join("fbx");
+    let glb = convert(Path::new("tests/fixtures/doorway.glb"), &glb_path, &config).unwrap();
+    let fbx = convert(Path::new("tests/fixtures/doorway.fbx"), &fbx_path, &config).unwrap();
+    assert_eq!(glb.meshes.len(), fbx.meshes.len());
+    for mesh in &glb.meshes {
+        let counterpart = fbx
+            .meshes
+            .iter()
+            .find(|item| item.name == mesh.name)
+            .unwrap();
+        assert_eq!(mesh.triangles, counterpart.triangles);
+        assert_eq!(mesh.base_color, counterpart.base_color);
+        let a = triangle_corners(&fs::read(glb_path.join(&mesh.file)).unwrap());
+        let b = triangle_corners(&fs::read(fbx_path.join(&counterpart.file)).unwrap());
+        // Exporters may reorder/retriangulate faces; compare attributed corners.
+        for corner in a {
+            assert!(
+                b.iter().any(|candidate| corner
+                    .iter()
+                    .zip(candidate)
+                    .all(|(a, b)| (a - b).abs() < 0.0001)),
+                "unmatched corner {corner:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn obj_requires_explicit_source_units_and_encodes_uv_convention() {
+    let temporary = tempfile::tempdir().unwrap();
+    let source = Path::new("tests/fixtures/triangle.obj");
+    let output = temporary.path().join("obj");
+    let mut config = Config {
+        metres_per_stud: 0.5,
+        obj_metres_per_unit: None,
+    };
+    assert!(
+        convert(source, &output, &config)
+            .err()
+            .unwrap()
+            .to_string()
+            .contains("objMetresPerUnit")
+    );
+    assert!(!output.exists());
+    config.obj_metres_per_unit = Some(2.);
+    let manifest = convert(source, &output, &config).unwrap();
+    assert_eq!(manifest.meshes.len(), 1);
+    let bytes = fs::read(output.join(&manifest.meshes[0].file)).unwrap();
+    let corners = triangle_corners(&bytes);
+    assert_eq!(corners.len(), 3);
+    assert_eq!(corners[0], [0., 0., 0., 0., 0., 1., 0., 1.]);
+    assert_eq!(corners[1], [4., 0., 0., 0., 0., 1., 1., 1.]);
+    assert_eq!(corners[2], [0., 4., 0., 0., 0., 1., 0., 0.]);
+}
+
 #[test]
 fn real_assets_encode_deterministically_with_consistent_native_layout() {
     let temporary = tempfile::tempdir().unwrap();
     let config = Config {
         metres_per_stud: 0.28,
+        obj_metres_per_unit: None,
     };
     for name in ["doorway", "stair"] {
         let source = format!("tests/fixtures/{name}.glb");
@@ -31,6 +106,22 @@ fn real_assets_encode_deterministically_with_consistent_native_layout() {
 
         for entry in manifest.meshes {
             let bytes = fs::read(first.join(&entry.file)).unwrap();
+            let mut cursor = std::io::Cursor::new(&bytes);
+            let decoded = rbx_mesh::read_mesh_versioned(&mut cursor).unwrap();
+            assert_eq!(cursor.position() as usize, bytes.len());
+            let rbx_mesh::mesh::Mesh::V2(decoded) = decoded else {
+                panic!("wrong native mesh version");
+            };
+            assert_eq!(decoded.faces.len(), entry.triangles);
+            let rbx_mesh::mesh::Vertices2::Full(vertices) = decoded.vertices else {
+                panic!("missing native attributes");
+            };
+            assert_eq!(vertices.len(), entry.vertices);
+            assert!(
+                vertices
+                    .iter()
+                    .all(|v| v.color == [255; 4] && v.tangent == [0; 4])
+            );
             assert_eq!(bytes, fs::read(second.join(&entry.file)).unwrap());
             assert_eq!(&bytes[..13], b"version 2.00\n");
             assert_eq!(&bytes[13..17], &[12, 0, 40, 12]);
@@ -63,6 +154,7 @@ fn metric_configuration_is_respected_and_existing_outputs_are_preserved() {
         &a,
         &Config {
             metres_per_stud: 0.28,
+            obj_metres_per_unit: None,
         },
     )
     .unwrap();
@@ -71,6 +163,7 @@ fn metric_configuration_is_respected_and_existing_outputs_are_preserved() {
         &b,
         &Config {
             metres_per_stud: 0.56,
+            obj_metres_per_unit: None,
         },
     )
     .unwrap();
@@ -90,7 +183,8 @@ fn metric_configuration_is_respected_and_existing_outputs_are_preserved() {
             source,
             &a,
             &Config {
-                metres_per_stud: 1.
+                metres_per_stud: 1.,
+                obj_metres_per_unit: None,
             }
         )
         .is_err()
@@ -103,7 +197,8 @@ fn metric_configuration_is_respected_and_existing_outputs_are_preserved() {
                 source,
                 &output,
                 &Config {
-                    metres_per_stud: scale
+                    metres_per_stud: scale,
+                    obj_metres_per_unit: None,
                 }
             )
             .is_err()
@@ -121,6 +216,7 @@ fn unsupported_materials_fail_without_silently_losing_transmission() {
         &output,
         &Config {
             metres_per_stud: 0.28,
+            obj_metres_per_unit: None,
         },
     )
     .err()
@@ -163,7 +259,8 @@ fn cli_conversion_needs_no_catalog_server_or_credentials() {
             &unsupported,
             &failed,
             &Config {
-                metres_per_stud: 1.
+                metres_per_stud: 1.,
+                obj_metres_per_unit: None,
             }
         )
         .is_err()

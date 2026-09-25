@@ -10,8 +10,12 @@ separate deployment stage.
 
 `roblox convert mesh SOURCE --config CONFIG --output NEW_DIRECTORY`
 
-Currently the source adapter supports self-contained GLB, not FBX, OBJ or external
-glTF buffers yet. The encoder is independent of GLB and accepts typed Rust mesh
+Source adapters support self-contained GLB, FBX and OBJ. External glTF buffers
+are not supported yet. FBX/OBJ parsing uses the MIT/Unlicense ufbx library linked
+into the executable, not a conversion subprocess. FBX unit metadata is converted
+to metres; OBJ requires explicit `objMetresPerUnit` in JSON because the format
+does not define units. External OBJ material libraries currently fail explicitly.
+The encoder is independent of these adapters and accepts typed Rust mesh
 data. The command emits native v2.00 mesh files plus a deterministic manifest.
 JSON configuration requires `metresPerStud`; it has no Studio/plugin settings.
 Output directories must not exist. Source files are never modified.
@@ -45,12 +49,16 @@ indices fail before emission.
 
 Evidence levels remain separate: exact-layout/unit tests, source conversion tests,
 independent decoder acceptance, engine rendering/physics acceptance and upload
-acceptance. Passing the first two does not establish the latter three. No Studio
-or cloud acceptance has been claimed for these outputs.
+acceptance. The current tests also decode emitted files using `rbx_mesh` 0.7.0
+(a test-only dependency compatible with Rust 1.93) and compare FBX and GLB exports
+of the same Blender-authored doorway, including position, normal and UV corners.
+These checks do not establish engine or upload acceptance. No Studio or cloud
+acceptance has been claimed for these outputs.
 
 ## Issue inventory
 
-1. Source formats to native static mesh; first increment above, more adapters open.
+1. Source formats to native static mesh; GLB, FBX and OBJ adapters implemented,
+   broader attribute coverage, external glTF and native acceptance still open.
 2. Native collision payloads and local cooking.
 3. Skinned mesh, rig and weights.
 4. Animation representations.

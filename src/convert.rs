@@ -13,6 +13,8 @@ use std::{
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Config {
     pub metres_per_stud: f32,
+    /// OBJ has no standard unit metadata. Required only for OBJ input.
+    pub obj_metres_per_unit: Option<f64>,
 }
 
 #[derive(Serialize)]
@@ -41,9 +43,9 @@ pub struct Entry {
     pub double_sided: bool,
 }
 
-struct Output {
-    entry: Entry,
-    bytes: Vec<u8>,
+pub(crate) struct Output {
+    pub entry: Entry,
+    pub bytes: Vec<u8>,
 }
 
 fn visit(
@@ -171,15 +173,8 @@ fn visit(
     Ok(())
 }
 
-pub fn convert(source: &Path, output: &Path, config: &Config) -> Result<Manifest> {
-    if !config.metres_per_stud.is_finite() || config.metres_per_stud <= 0. {
-        return Err("metresPerStud must be positive and finite".into());
-    }
-    let bytes = fs::read(source)?;
-    if !bytes.starts_with(b"glTF") {
-        return Err("source format is not implemented yet; currently supported: GLB".into());
-    }
-    let gltf = gltf::Gltf::from_slice(&bytes)?;
+fn read_glb(bytes: &[u8], config: &Config) -> Result<Vec<Output>> {
+    let gltf = gltf::Gltf::from_slice(bytes)?;
     if gltf
         .buffers()
         .any(|buffer| !matches!(buffer.source(), gltf::buffer::Source::Bin))
@@ -221,6 +216,19 @@ pub fn convert(source: &Path, output: &Path, config: &Config) -> Result<Manifest
     if outputs.is_empty() {
         return Err("GLB contains no mesh geometry".into());
     }
+    Ok(outputs)
+}
+
+pub fn convert(source: &Path, output: &Path, config: &Config) -> Result<Manifest> {
+    if !config.metres_per_stud.is_finite() || config.metres_per_stud <= 0. {
+        return Err("metresPerStud must be positive and finite".into());
+    }
+    let bytes = fs::read(source)?;
+    let outputs = if bytes.starts_with(b"glTF") {
+        read_glb(&bytes, config)?
+    } else {
+        crate::source_mesh::read(source, &bytes, config)?
+    };
 
     // Validate and encode before creating output. Existing paths are never replaced.
     fs::create_dir(output)?;

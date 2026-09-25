@@ -10,8 +10,8 @@ The target is now **local source asset conversion and game assembly**, with no
 Roblox server or Studio dependency during builds. Deployment will be separate.
 See [format inventory and implementation evidence](docs/offline-conversion.md).
 
-First implemented conversion increment (GLB input currently; FBX/glTF/OBJ adapters
-remain tracked work under the general mesh-conversion issue):
+Implemented static input adapters: GLB, FBX and OBJ. External glTF and broader
+attribute/material coverage remain tracked under the format issues:
 
 ```sh
 roblox convert mesh model.glb --config examples/conversion.json --output converted
