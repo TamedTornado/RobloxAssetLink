@@ -125,7 +125,13 @@ fn key(id: &str) -> String {
     format!("{:x}", Sha256::digest(id.as_bytes()))
 }
 
-fn build_asset(root: &Path, output: &Path, asset: &Asset, uri_prefix: &str) -> Result<Vec<String>> {
+fn build_asset(
+    root: &Path,
+    output: &Path,
+    asset: &Asset,
+    uri_prefix: &str,
+    rig: &mut Option<crate::animation::Rig>,
+) -> Result<Vec<String>> {
     match &asset.conversion {
         Conversion::MediaSource { source, config } => {
             fs::create_dir(output)?;
@@ -189,6 +195,7 @@ fn build_asset(root: &Path, output: &Path, asset: &Asset, uri_prefix: &str) -> R
                 output.join("manifest.json"),
                 serde_json::to_vec_pretty(&manifest)?,
             )?;
+            *rig = Some(manifest.rig);
             Ok(vec!["animation.rbxm".into()])
         }
         Conversion::Skin { source, config } => {
@@ -206,6 +213,7 @@ fn build_asset(root: &Path, output: &Path, asset: &Asset, uri_prefix: &str) -> R
                 output.join("manifest.json"),
                 serde_json::to_vec_pretty(&manifest)?,
             )?;
+            *rig = Some(manifest.rig);
             Ok(vec!["animation.rbxm".into()])
         }
         Conversion::Animation { source } => {
@@ -293,11 +301,13 @@ pub fn build(source: &Path, output: &Path) -> Result<Manifest> {
         let mut files = Vec::new();
         for asset in &plan.assets {
             let directory = format!("assets/{}", key(&asset.id));
+            let mut rig = None;
             let generated = build_asset(
                 root,
                 &output.join(&directory),
                 asset,
                 &format!("rbxasset://{directory}/"),
+                &mut rig,
             )?;
             for file in generated {
                 let path = format!("{directory}/{file}");
@@ -311,6 +321,11 @@ pub fn build(source: &Path, output: &Path) -> Result<Manifest> {
                     scene::ResolvedAsset {
                         uri: local_uri.clone(),
                         path: output.join(&path),
+                        animation_rig: if file == "animation.rbxm" {
+                            rig.take()
+                        } else {
+                            None
+                        },
                     },
                 );
                 files.push(Artifact {

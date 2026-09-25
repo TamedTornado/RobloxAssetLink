@@ -20,6 +20,8 @@ pub struct Specification {
     pub kind: Kind,
     pub roots: Vec<Node>,
     pub script_compiler: Option<crate::scripts::Config>,
+    #[serde(default)]
+    pub animation_bindings: Vec<crate::rig_binding::Binding>,
 }
 
 #[derive(Deserialize)]
@@ -54,6 +56,7 @@ pub struct AssetReference {
 pub struct ResolvedAsset {
     pub uri: String,
     pub path: PathBuf,
+    pub animation_rig: Option<crate::animation::Rig>,
 }
 
 pub type AssetMap = BTreeMap<AssetReference, ResolvedAsset>;
@@ -368,6 +371,28 @@ pub fn build_with_assets(source: &Path, output: &Path, assets: &AssetMap) -> Res
     }
     for node in &specification.roots {
         link(&mut dom, node, &ids)?;
+    }
+    let mut pending: Vec<_> = specification.roots.iter().collect();
+    while let Some(node) = pending.pop() {
+        for reference in node.assets.values() {
+            if assets
+                .get(reference)
+                .is_some_and(|asset| asset.animation_rig.is_some())
+                && !specification
+                    .animation_bindings
+                    .iter()
+                    .any(|binding| binding.animation == *reference)
+            {
+                return Err(format!(
+                    "source animation asset {reference:?} requires an animationBindings target rig"
+                )
+                .into());
+            }
+        }
+        pending.extend(&node.children);
+    }
+    for binding in &specification.animation_bindings {
+        crate::rig_binding::validate(binding, &dom, &ids, assets)?;
     }
     let mut bytes = Vec::new();
     // Cargo enables the library's always-bundled feature, including its constructor.

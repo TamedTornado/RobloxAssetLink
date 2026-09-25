@@ -40,6 +40,36 @@ An independently authored native terrain fixture additionally verifies exact
 voxel/physics bytes, material palette and water properties through place assembly.
 See [terrain inventory](terrain-format.md) and its separate generation issue.
 
+## Animation target compatibility
+
+Scenes linking an `animationGltf` or `animationFbx` asset must declare an
+`animationBindings` entry with `animation` (the usual asset/file reference),
+`root` (scene id of the root Bone), and positive `rigidTolerance` below one.
+The builder receives the exact rig metadata from the conversion result; it does
+not infer an association from filenames, reread a stale external manifest, or
+trust a caller-provided matching hash alone.
+
+The target root must be directly under its MeshPart. Every bone name, parent
+relationship and local rest CFrame must match the source rig; the source's
+`rootParentCframe` is folded into the root rest exactly once. Duplicate names,
+missing/extra bones, non-rigid matrices, missing metadata and omitted required
+bindings fail before scene serialization. Bone ancestry outside the selected
+root cannot quietly add another transform. Non-Bone intermediary hierarchies
+are rejected. The tolerance is explicit numerical admission, not a hidden limit.
+
+This is rest-space validation, not retargeting, rig creation or animation
+execution. A skin's inverse-bind rest may differ from the source animation's
+rest; that mismatch must be resolved deliberately. Canonical authored animation
+JSON has no imported source rig metadata and cannot satisfy this source-rig
+binding check; it remains usable as a separately authored artifact, without an
+imported-rig compatibility claim.
+
+Integration tests use the independent Khronos glTF and Maya/ufbx FBX fixtures.
+They verify successful native scene builds and reject omitted root context,
+wrong names/counts, reparented bones with unchanged names/count, invalid tolerance,
+missing references and omitted declarations. Failed bundles remove their own
+partial outputs. These checks do not establish current engine animation playback.
+
 ## Outstanding integration and reproducibility work
 
 Bundle assembly supports explicit mesh/collision/texture bindings and native

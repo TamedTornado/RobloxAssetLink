@@ -1,5 +1,9 @@
 # Native animation output — issue 4
 
+Source-imported clips now participate in explicit target-rig validation during
+scene assembly; see [animation target compatibility](scene-assembly.md#animation-target-compatibility).
+This checks real Bone rest transforms and hierarchy, not just a metadata hash.
+
 `animation::encode` serializes a canonical clip to native RBXM containing a
 KeyframeSequence, timed Keyframes, hierarchical Poses and event markers. Loop,
 priority, blend weights, easing settings, names and transforms are explicit data.
