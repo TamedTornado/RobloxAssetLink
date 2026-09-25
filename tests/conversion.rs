@@ -1,3 +1,4 @@
+use base64::Engine;
 use roblox_asset_link::convert::{Config, convert};
 use serde_json::Value;
 use std::{fs, path::Path, process::Command};
@@ -82,6 +83,74 @@ fn obj_requires_explicit_source_units_and_encodes_uv_convention() {
     assert_eq!(corners[0], [0., 0., 0., 0., 0., 1., 0., 1.]);
     assert_eq!(corners[1], [4., 0., 0., 0., 0., 1., 1., 1.]);
     assert_eq!(corners[2], [0., 4., 0., 0., 0., 1., 0., 0.]);
+}
+
+#[test]
+fn gltf_local_and_embedded_buffers_match_glb_and_reject_remote_or_escaped_paths() {
+    let temporary = tempfile::tempdir().unwrap();
+    let root = temporary.path().join("source");
+    fs::create_dir(&root).unwrap();
+    let glb = fs::read("tests/fixtures/doorway.glb").unwrap();
+    let json_length = u32_at(&glb, 12);
+    let mut document: Value = serde_json::from_slice(&glb[20..20 + json_length]).unwrap();
+    let binary = &glb[28 + json_length..];
+    let source = root.join("model.gltf");
+    fs::write(root.join("mesh data.bin"), binary).unwrap();
+    let config = Config {
+        metres_per_stud: 0.28,
+        obj_metres_per_unit: None,
+    };
+    let baseline_dir = temporary.path().join("baseline");
+    let baseline = convert(
+        Path::new("tests/fixtures/doorway.glb"),
+        &baseline_dir,
+        &config,
+    )
+    .unwrap();
+
+    for (index, uri) in [
+        "mesh%20data.bin".to_owned(),
+        format!(
+            "data:application/octet-stream;base64,{}",
+            base64::engine::general_purpose::STANDARD.encode(binary)
+        ),
+    ]
+    .iter()
+    .enumerate()
+    {
+        document["buffers"][0]["uri"] = serde_json::json!(uri);
+        fs::write(&source, serde_json::to_vec(&document).unwrap()).unwrap();
+        let directory = temporary.path().join(format!("out-{index}"));
+        let result = convert(&source, &directory, &config).unwrap();
+        assert_eq!(
+            serde_json::to_value(result).unwrap(),
+            serde_json::to_value(&baseline).unwrap()
+        );
+        for mesh in &baseline.meshes {
+            assert_eq!(
+                fs::read(directory.join(&mesh.file)).unwrap(),
+                fs::read(baseline_dir.join(&mesh.file)).unwrap()
+            );
+        }
+    }
+
+    fs::write(temporary.path().join("escape.bin"), binary).unwrap();
+    for uri in [
+        "https://example.com/mesh.bin",
+        "../escape.bin",
+        "%2e%2e/escape.bin",
+        "file:///tmp/mesh.bin",
+        "data:application/octet-stream;base64,invalid!",
+    ] {
+        document["buffers"][0]["uri"] = serde_json::json!(uri);
+        fs::write(&source, serde_json::to_vec(&document).unwrap()).unwrap();
+        let directory = temporary.path().join("rejected");
+        assert!(
+            convert(&source, &directory, &config).is_err(),
+            "accepted {uri}"
+        );
+        assert!(!directory.exists());
+    }
 }
 
 #[test]

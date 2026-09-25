@@ -10,8 +10,8 @@ The target is now **local source asset conversion and game assembly**, with no
 Roblox server or Studio dependency during builds. Deployment will be separate.
 See [format inventory and implementation evidence](docs/offline-conversion.md).
 
-Implemented static input adapters: GLB, FBX and OBJ. External glTF and broader
-attribute/material coverage remain tracked under the format issues:
+Implemented static input adapters: GLB/glTF, FBX and OBJ. Broader attribute/material
+coverage remains tracked under the format issues:
 
 ```sh
 roblox convert mesh model.glb --config examples/conversion.json --output converted

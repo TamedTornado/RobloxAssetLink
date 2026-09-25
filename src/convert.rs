@@ -1,6 +1,7 @@
 //! First offline conversion profile: static, untextured GLB to native meshes.
 
 use crate::{IDENTITY, Matrix, Result, dot, mesh, multiply, normal_matrix, point};
+use base64::Engine;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{
@@ -51,7 +52,7 @@ pub(crate) struct Output {
 fn visit(
     node: gltf::Node<'_>,
     transform: Matrix,
-    blob: &[u8],
+    buffers: &[Vec<u8>],
     scale: f32,
     outputs: &mut Vec<Output>,
 ) -> Result<()> {
@@ -93,7 +94,7 @@ fn visit(
                     "this profile does not support textures, emission or alpha masking".into(),
                 );
             }
-            let reader = primitive.reader(|_| Some(blob));
+            let reader = primitive.reader(|buffer| buffers.get(buffer.index()).map(Vec::as_slice));
             let positions: Vec<_> = reader
                 .read_positions()
                 .ok_or("positions required")?
@@ -173,19 +174,27 @@ fn visit(
     Ok(())
 }
 
-fn read_glb(bytes: &[u8], config: &Config) -> Result<Vec<Output>> {
+fn read_gltf(source: &Path, bytes: &[u8], config: &Config) -> Result<Vec<Output>> {
     let gltf = gltf::Gltf::from_slice(bytes)?;
-    if gltf
-        .buffers()
-        .any(|buffer| !matches!(buffer.source(), gltf::buffer::Source::Bin))
-        || gltf.extensions_used().next().is_some()
-        || gltf.animations().next().is_some()
-    {
-        return Err(
-            "this profile requires self-contained GLB without extensions or animations".into(),
-        );
+    if gltf.extensions_used().next().is_some() || gltf.animations().next().is_some() {
+        return Err("this static profile does not yet support extensions or animations".into());
     }
-    let blob = gltf.blob.as_deref().ok_or("GLB binary chunk required")?;
+    let root = source
+        .canonicalize()?
+        .parent()
+        .ok_or("source parent missing")?
+        .to_owned();
+    let mut buffers = Vec::new();
+    for buffer in gltf.buffers() {
+        let data = match buffer.source() {
+            gltf::buffer::Source::Bin => gltf.blob.clone().ok_or("GLB binary chunk required")?,
+            gltf::buffer::Source::Uri(uri) => read_buffer(&root, uri)?,
+        };
+        if data.len() < buffer.length() {
+            return Err("buffer is shorter than declared byteLength".into());
+        }
+        buffers.push(data);
+    }
     let scene = gltf
         .default_scene()
         .or_else(|| {
@@ -207,7 +216,7 @@ fn read_glb(bytes: &[u8], config: &Config) -> Result<Vec<Output>> {
         visit(
             node.clone(),
             transform,
-            blob,
+            &buffers,
             config.metres_per_stud,
             &mut outputs,
         )?;
@@ -219,13 +228,39 @@ fn read_glb(bytes: &[u8], config: &Config) -> Result<Vec<Output>> {
     Ok(outputs)
 }
 
+fn read_buffer(root: &Path, uri: &str) -> Result<Vec<u8>> {
+    if let Some(data) = uri.strip_prefix("data:") {
+        let (metadata, content) = data.split_once(',').ok_or("invalid data URI")?;
+        if !matches!(
+            metadata,
+            "application/octet-stream;base64" | "application/gltf-buffer;base64"
+        ) {
+            return Err("unsupported buffer data URI encoding".into());
+        }
+        return Ok(base64::engine::general_purpose::STANDARD.decode(content)?);
+    }
+    let path = percent_encoding::percent_decode_str(uri).decode_utf8()?;
+    if path.contains([':', '\\', '?', '#', '\0']) || Path::new(path.as_ref()).is_absolute() {
+        return Err("buffer URI must be a local relative path; network access is forbidden".into());
+    }
+    let path = root.join(path.as_ref()).canonicalize()?;
+    if !path.starts_with(root) {
+        return Err("buffer path escapes the source directory".into());
+    }
+    Ok(fs::read(path)?)
+}
+
 pub fn convert(source: &Path, output: &Path, config: &Config) -> Result<Manifest> {
     if !config.metres_per_stud.is_finite() || config.metres_per_stud <= 0. {
         return Err("metresPerStud must be positive and finite".into());
     }
     let bytes = fs::read(source)?;
-    let outputs = if bytes.starts_with(b"glTF") {
-        read_glb(&bytes, config)?
+    let outputs = if bytes.starts_with(b"glTF")
+        || source
+            .extension()
+            .is_some_and(|v| v.eq_ignore_ascii_case("gltf"))
+    {
+        read_gltf(source, &bytes, config)?
     } else {
         crate::source_mesh::read(source, &bytes, config)?
     };

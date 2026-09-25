@@ -10,8 +10,9 @@ separate deployment stage.
 
 `roblox convert mesh SOURCE --config CONFIG --output NEW_DIRECTORY`
 
-Source adapters support self-contained GLB, FBX and OBJ. External glTF buffers
-are not supported yet. FBX/OBJ parsing uses the MIT/Unlicense ufbx library linked
+Source adapters support GLB, glTF, FBX and OBJ. glTF buffers can be local files
+under the source directory or embedded base64 data. Network URIs, absolute paths
+and directory escapes are rejected. FBX/OBJ parsing uses the MIT/Unlicense ufbx library linked
 into the executable, not a conversion subprocess. FBX unit metadata is converted
 to metres; OBJ requires explicit `objMetresPerUnit` in JSON because the format
 does not define units. External OBJ material libraries currently fail explicitly.
@@ -57,8 +58,8 @@ acceptance has been claimed for these outputs.
 
 ## Issue inventory
 
-1. Source formats to native static mesh; GLB, FBX and OBJ adapters implemented,
-   broader attribute coverage, external glTF and native acceptance still open.
+1. Source formats to native static mesh; GLB/glTF, FBX and OBJ adapters implemented,
+   broader attribute coverage and native acceptance still open.
 2. Native collision payloads and local cooking.
 3. Skinned mesh, rig and weights.
 4. Animation representations.
