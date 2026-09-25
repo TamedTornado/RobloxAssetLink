@@ -179,11 +179,12 @@ fn build_asset(root: &Path, output: &Path, asset: &Asset, uri_prefix: &str) -> R
             config,
             collision,
         } => {
-            let manifest = crate::convert::convert_with_collision(
+            let manifest = crate::convert::convert_linked(
                 &local(root, source)?,
                 output,
                 config,
                 collision.as_ref(),
+                Some(uri_prefix),
             )?;
             let mut files = Vec::new();
             for mesh in manifest.meshes {
@@ -191,6 +192,16 @@ fn build_asset(root: &Path, output: &Path, asset: &Asset, uri_prefix: &str) -> R
                 if let Some(collision) = mesh.collision {
                     files.push(collision.file);
                 }
+            }
+            for material in manifest.materials {
+                files.push(format!("{}/material.rbxm", material.directory));
+                files.extend(
+                    material
+                        .artifact
+                        .maps
+                        .into_values()
+                        .map(|map| format!("{}/{}", material.directory, map.file)),
+                );
             }
             Ok(files)
         }

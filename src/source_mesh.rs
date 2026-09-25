@@ -245,6 +245,7 @@ fn read_nodes(
                     roughness,
                     double_sided: false,
                     collision: None,
+                    material: None,
                 },
                 bytes,
                 geometry,

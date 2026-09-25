@@ -178,6 +178,7 @@ pub(crate) fn convert(source: &Path, output: &Path, config: &Config) -> Result<M
         }
     }
     let geometry_config = crate::convert::Config {
+        materials: None,
         metres_per_stud: config.metres_per_stud,
         obj_metres_per_unit: None,
     };

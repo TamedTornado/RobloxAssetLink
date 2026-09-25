@@ -24,8 +24,8 @@ Output directories must not exist. Source files are never modified.
 The static adapter bakes scene transforms into positions, applies inverse
 transpose normals, fixes reflected winding, retains UV0 and records material
 factors in the manifest. This is geometry conversion, not finished scene assembly:
-pivot/hierarchy reconstruction belongs to the place/model issue. Textures,
-skinning, animation, morphs, extra vertex channels and extensions currently fail
+pivot/hierarchy reconstruction belongs to the place/model issue. Textures require
+the explicit material policy below. Skinning, animation, morphs, extra vertex channels and extensions currently fail
 explicitly. GLB/glTF and FBX/OBJ adapters preserve vertex colors and available
 tangents, including alpha and transformed tangent handedness. FBX tangent data
 requires source bitangents to determine handedness; UV convention conversion is
@@ -33,6 +33,35 @@ accounted for in its sign. Missing colors are white and missing
 tangents use the historical zero marker; no tangent generation is claimed.
 Collision is opt-in through a separate JSON recipe and is otherwise explicitly
 reported as not generated. See [collision implementation](collision-format.md).
+
+### Integrated glTF materials
+
+For static GLB/glTF, a `materials` configuration object enables source-material
+conversion alongside geometry. It requires `localUriPrefix`, `maxWidth`,
+`maxHeight` and `maxDecodedBytes`, with the same semantics as material conversion.
+Used materials are converted once each under `material-INDEX/`. Each mesh entry
+records its corresponding `material.rbxm` path; the manifest's `materials` list
+contains source indices and texture dependency hashes. Source factors remain
+metadata in mesh entries: they are already baked into the material maps and must
+not be applied a second time as a part tint.
+
+Bundle conversion includes those native material/map artifacts and relinks all
+map references to actual bundle locations. Scene nodes can use the recorded
+material path with the existing `material` attachment. This does not yet derive
+MeshPart sizing/pivots or automatically author the scene hierarchy.
+
+Textured primitives require UV0; normal-mapped primitives require source
+tangents. COLOR_0 in the integrated material profile is rejected until its
+native interaction with SurfaceAppearance is established. All source-material
+profile exclusions still apply. Implicit default materials and FBX/OBJ material
+integration remain unsupported and fail explicitly when this policy is enabled.
+
+The independent Cesium BoxTextured fixture checks UV preservation through the
+separate native reader and exact embedded color pixels. Its original sampler
+requests nearest-texel mip filtering, which is rejected. The success case
+explicitly adapts only that sampler to linear filtering in a temporary source;
+the retained fixture, geometry and image bytes are unchanged. The test does not
+claim support for the original sampler or establish native renderer acceptance.
 Material factors are metadata,
 not completed Roblox material objects.
 

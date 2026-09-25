@@ -55,8 +55,10 @@ outputs requires relinking. Only safe local URI segments are accepted. The
 command never uploads, installs content into Studio or manufactures remote IDs.
 In a bundle, the linker replaces this standalone prefix with the asset's actual
 bundle-local directory before native serialization; the source JSON is unchanged.
-Core glTF source-material extraction is described below; FBX material extraction
-and automatic material-to-source-geometry association remain outstanding.
+Core glTF source-material extraction is described below. Static glTF mesh
+conversion can also associate primitives with their converted materials through
+the explicit policy in [mesh conversion](offline-conversion.md). FBX material
+extraction remains outstanding.
 
 Tests independently decode the native instance properties, check exact channel
 values, compare repeated CLI outputs byte-for-byte, and cover conflicting maps,
@@ -93,7 +95,8 @@ double-sided geometry, non-UV0 bindings, nonunit normal scale, nonrepeat wrappin
 and non-linear sampler settings. There is no implicit shader approximation or
 UV-set reassignment. Double-sidedness and vertex-color multiplication require
 geometry integration; importing this material alone does not build its source
-mesh, and the existing mesh importer still rejects textured source materials.
+mesh. The static mesh importer accepts supported textured source materials when
+its explicit material-conversion policy is configured.
 
 Tests cover exact known factor results (including gamma-sensitive values), alpha,
 normal samples, image encodings, malformed/unsupported inputs, configured limits,

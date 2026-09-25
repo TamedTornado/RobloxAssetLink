@@ -28,6 +28,7 @@ fn fbx_and_glb_match_geometry_normals_and_uvs() {
     let config = Config {
         metres_per_stud: 0.28,
         obj_metres_per_unit: None,
+        materials: None,
     };
     let glb_path = temporary.path().join("glb");
     let fbx_path = temporary.path().join("fbx");
@@ -65,6 +66,7 @@ fn obj_requires_explicit_source_units_and_encodes_uv_convention() {
     let mut config = Config {
         metres_per_stud: 0.5,
         obj_metres_per_unit: None,
+        materials: None,
     };
     assert!(
         convert(source, &output, &config)
@@ -99,6 +101,7 @@ fn gltf_local_and_embedded_buffers_match_glb_and_reject_remote_or_escaped_paths(
     let config = Config {
         metres_per_stud: 0.28,
         obj_metres_per_unit: None,
+        materials: None,
     };
     let baseline_dir = temporary.path().join("baseline");
     let baseline = convert(
@@ -197,6 +200,7 @@ fn gltf_preserves_colors_and_transforms_tangent_handedness() {
         &Config {
             metres_per_stud: 1.,
             obj_metres_per_unit: None,
+            materials: None,
         },
     )
     .unwrap();
@@ -228,6 +232,7 @@ fn fbx_preserves_color_alpha_and_tangent_sign_across_uv_and_transform_reflection
         &Config {
             metres_per_stud: 1.,
             obj_metres_per_unit: None,
+            materials: None,
         },
     )
     .unwrap();
@@ -248,6 +253,7 @@ fn real_assets_encode_deterministically_with_consistent_native_layout() {
     let config = Config {
         metres_per_stud: 0.28,
         obj_metres_per_unit: None,
+        materials: None,
     };
     for name in ["doorway", "stair"] {
         let source = format!("tests/fixtures/{name}.glb");
@@ -313,6 +319,7 @@ fn metric_configuration_is_respected_and_existing_outputs_are_preserved() {
         &Config {
             metres_per_stud: 0.28,
             obj_metres_per_unit: None,
+            materials: None,
         },
     )
     .unwrap();
@@ -322,6 +329,7 @@ fn metric_configuration_is_respected_and_existing_outputs_are_preserved() {
         &Config {
             metres_per_stud: 0.56,
             obj_metres_per_unit: None,
+            materials: None,
         },
     )
     .unwrap();
@@ -343,6 +351,7 @@ fn metric_configuration_is_respected_and_existing_outputs_are_preserved() {
             &Config {
                 metres_per_stud: 1.,
                 obj_metres_per_unit: None,
+                materials: None,
             }
         )
         .is_err()
@@ -357,6 +366,7 @@ fn metric_configuration_is_respected_and_existing_outputs_are_preserved() {
                 &Config {
                     metres_per_stud: scale,
                     obj_metres_per_unit: None,
+                    materials: None,
                 }
             )
             .is_err()
@@ -375,6 +385,7 @@ fn unsupported_materials_fail_without_silently_losing_transmission() {
         &Config {
             metres_per_stud: 0.28,
             obj_metres_per_unit: None,
+            materials: None,
         },
     )
     .err()
@@ -419,6 +430,7 @@ fn cli_conversion_needs_no_catalog_server_or_credentials() {
             &Config {
                 metres_per_stud: 1.,
                 obj_metres_per_unit: None,
+                materials: None,
             }
         )
         .is_err()

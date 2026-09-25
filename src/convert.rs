@@ -16,6 +16,16 @@ pub struct Config {
     pub metres_per_stud: f32,
     /// OBJ has no standard unit metadata. Required only for OBJ input.
     pub obj_metres_per_unit: Option<f64>,
+    pub materials: Option<MaterialConfig>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct MaterialConfig {
+    pub local_uri_prefix: String,
+    pub max_width: u32,
+    pub max_height: u32,
+    pub max_decoded_bytes: u64,
 }
 
 #[derive(Serialize)]
@@ -26,6 +36,15 @@ pub struct Manifest {
     pub metres_per_stud: f32,
     pub collision_generated: bool,
     pub meshes: Vec<Entry>,
+    pub materials: Vec<MaterialEntry>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MaterialEntry {
+    pub source_index: usize,
+    pub directory: String,
+    pub artifact: crate::material::Manifest,
 }
 
 #[derive(Serialize)]
@@ -43,6 +62,7 @@ pub struct Entry {
     pub roughness: f32,
     pub double_sided: bool,
     pub collision: Option<CollisionEntry>,
+    pub material: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -66,6 +86,7 @@ pub(crate) struct Output {
 #[derive(Clone, Copy)]
 pub(crate) enum GeometryProfile {
     Static,
+    TexturedStatic,
     Skin,
 }
 
@@ -77,7 +98,7 @@ pub(crate) fn visit(
     profile: GeometryProfile,
     outputs: &mut Vec<Output>,
 ) -> Result<()> {
-    if (node.skin().is_some() && matches!(profile, GeometryProfile::Static))
+    if (node.skin().is_some() && !matches!(profile, GeometryProfile::Skin))
         || node.camera().is_some()
     {
         return Err("static mesh conversion does not support skins or cameras".into());
@@ -115,19 +136,34 @@ pub(crate) fn visit(
             }
             let material = primitive.material();
             let pbr = material.pbr_metallic_roughness();
-            if pbr.base_color_texture().is_some()
-                || pbr.metallic_roughness_texture().is_some()
-                || material.normal_texture().is_some()
-                || material.occlusion_texture().is_some()
-                || material.emissive_texture().is_some()
-                || material.emissive_factor() != [0.; 3]
-                || material.alpha_mode() == gltf::material::AlphaMode::Mask
+            if !matches!(profile, GeometryProfile::TexturedStatic)
+                && (pbr.base_color_texture().is_some()
+                    || pbr.metallic_roughness_texture().is_some()
+                    || material.normal_texture().is_some()
+                    || material.occlusion_texture().is_some()
+                    || material.emissive_texture().is_some()
+                    || material.emissive_factor() != [0.; 3]
+                    || material.alpha_mode() == gltf::material::AlphaMode::Mask)
             {
                 return Err(
                     "this profile does not support textures, emission or alpha masking".into(),
                 );
             }
             let reader = primitive.reader(|buffer| buffers.get(buffer.index()).map(Vec::as_slice));
+            if matches!(profile, GeometryProfile::TexturedStatic) {
+                let has_textures = pbr.base_color_texture().is_some()
+                    || pbr.metallic_roughness_texture().is_some()
+                    || material.normal_texture().is_some();
+                if has_textures && reader.read_tex_coords(0).is_none() {
+                    return Err("textured geometry requires UV0".into());
+                }
+                if material.normal_texture().is_some() && reader.read_tangents().is_none() {
+                    return Err("normal-mapped geometry requires source tangents; tangent generation is not implemented".into());
+                }
+                if reader.read_colors(0).is_some() {
+                    return Err("textured material vertex-color rendering has not been established; refusing to ignore or double-apply COLOR_0".into());
+                }
+            }
             let positions: Vec<_> = reader
                 .read_positions()
                 .ok_or("positions required")?
@@ -136,8 +172,8 @@ pub(crate) fn visit(
             let uvs: Vec<_> = reader
                 .read_tex_coords(0)
                 .map(|values| values.into_f32().collect())
-                // This profile already rejects every texture dependency. UVs
-                // have no source meaning when absent on an untextured mesh.
+                // Textured geometry was checked above. UVs have no source
+                // meaning when absent on an untextured mesh.
                 .unwrap_or_else(|| vec![[0.; 2]; positions.len()]);
             if positions.len() != normals.len() || positions.len() != uvs.len() {
                 return Err("mesh attribute counts do not match".into());
@@ -230,6 +266,13 @@ pub(crate) fn visit(
                     roughness: pbr.roughness_factor(),
                     double_sided: material.double_sided(),
                     collision: None,
+                    material: if matches!(profile, GeometryProfile::TexturedStatic) {
+                        material
+                            .index()
+                            .map(|index| format!("material-{index}/material.rbxm"))
+                    } else {
+                        None
+                    },
                 },
                 bytes,
                 geometry,
@@ -268,7 +311,11 @@ fn read_gltf(source: &Path, bytes: &[u8], config: &Config) -> Result<Vec<Output>
             transform,
             &buffers,
             config.metres_per_stud,
-            GeometryProfile::Static,
+            if config.materials.is_some() {
+                GeometryProfile::TexturedStatic
+            } else {
+                GeometryProfile::Static
+            },
             &mut outputs,
         )?;
         pending.extend(node.children().map(|child| (child, transform)));
@@ -335,15 +382,30 @@ pub fn convert_with_collision(
     config: &Config,
     recipe: Option<&crate::collision::Recipe>,
 ) -> Result<Manifest> {
+    convert_linked(source, output, config, recipe, None)
+}
+
+pub(crate) fn convert_linked(
+    source: &Path,
+    output: &Path,
+    config: &Config,
+    recipe: Option<&crate::collision::Recipe>,
+    uri_prefix: Option<&str>,
+) -> Result<Manifest> {
     if !config.metres_per_stud.is_finite() || config.metres_per_stud <= 0. {
         return Err("metresPerStud must be positive and finite".into());
     }
     let bytes = fs::read(source)?;
-    let mut outputs = if bytes.starts_with(b"glTF")
+    let is_gltf = bytes.starts_with(b"glTF")
         || source
             .extension()
-            .is_some_and(|v| v.eq_ignore_ascii_case("gltf"))
-    {
+            .is_some_and(|v| v.eq_ignore_ascii_case("gltf"));
+    if config.materials.is_some() && !is_gltf {
+        return Err(
+            "source material integration is currently implemented for glTF/GLB only".into(),
+        );
+    }
+    let mut outputs = if is_gltf {
         read_gltf(source, &bytes, config)?
     } else {
         crate::source_mesh::read(source, &bytes, config)?
@@ -369,6 +431,53 @@ pub fn convert_with_collision(
     // Validate and encode before creating output. Existing paths are never replaced.
     fs::create_dir(output)?;
     let result = (|| -> Result<Manifest> {
+        let mut materials = Vec::new();
+        if let Some(policy) = &config.materials {
+            let gltf = gltf::Gltf::from_slice(&bytes)?;
+            let mut indices = std::collections::BTreeSet::new();
+            for artifact in &outputs {
+                let node = gltf
+                    .nodes()
+                    .nth(artifact.entry.node_index)
+                    .ok_or("source node missing")?;
+                let mesh = node.mesh().ok_or("source mesh missing")?;
+                let primitive = mesh
+                    .primitives()
+                    .nth(artifact.entry.primitive_index)
+                    .ok_or("source primitive missing")?;
+                let index = primitive.material().index().ok_or("material conversion requires explicit source materials; implicit default material is not implemented")?;
+                indices.insert(index);
+            }
+            for index in indices {
+                let directory = format!("material-{index}");
+                let prefix = uri_prefix.unwrap_or(&policy.local_uri_prefix);
+                if !prefix.ends_with('/') {
+                    return Err("material URI prefix must end with slash".into());
+                }
+                let artifact = crate::material_gltf::convert(
+                    source,
+                    &output.join(&directory),
+                    &crate::material_gltf::Config {
+                        material_index: index,
+                        name: gltf
+                            .materials()
+                            .nth(index)
+                            .and_then(|m| m.name())
+                            .unwrap_or("Material")
+                            .to_owned(),
+                        local_uri_prefix: format!("{prefix}{directory}/"),
+                        max_width: policy.max_width,
+                        max_height: policy.max_height,
+                        max_decoded_bytes: policy.max_decoded_bytes,
+                    },
+                )?;
+                materials.push(MaterialEntry {
+                    source_index: index,
+                    directory,
+                    artifact,
+                });
+            }
+        }
         for (file, data) in collision_files {
             fs::write(output.join(file), data)?;
         }
@@ -383,6 +492,7 @@ pub fn convert_with_collision(
             metres_per_stud: config.metres_per_stud,
             collision_generated: recipe.is_some(),
             meshes,
+            materials,
         };
         fs::write(
             output.join("manifest.json"),
