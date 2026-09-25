@@ -3,6 +3,7 @@ use sha2::{Digest, Sha256};
 use std::{fs, path::Path};
 
 pub mod animation;
+pub mod animation_gltf;
 pub mod audio;
 pub mod bundle;
 pub mod catalog;

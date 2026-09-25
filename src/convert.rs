@@ -223,22 +223,7 @@ fn read_gltf(source: &Path, bytes: &[u8], config: &Config) -> Result<Vec<Output>
     if gltf.extensions_used().next().is_some() || gltf.animations().next().is_some() {
         return Err("this static profile does not yet support extensions or animations".into());
     }
-    let root = source
-        .canonicalize()?
-        .parent()
-        .ok_or("source parent missing")?
-        .to_owned();
-    let mut buffers = Vec::new();
-    for buffer in gltf.buffers() {
-        let data = match buffer.source() {
-            gltf::buffer::Source::Bin => gltf.blob.clone().ok_or("GLB binary chunk required")?,
-            gltf::buffer::Source::Uri(uri) => read_buffer(&root, uri)?,
-        };
-        if data.len() < buffer.length() {
-            return Err("buffer is shorter than declared byteLength".into());
-        }
-        buffers.push(data);
-    }
+    let buffers = load_gltf_buffers(source, &gltf)?;
     let scene = gltf
         .default_scene()
         .or_else(|| {
@@ -270,6 +255,26 @@ fn read_gltf(source: &Path, bytes: &[u8], config: &Config) -> Result<Vec<Output>
         return Err("GLB contains no mesh geometry".into());
     }
     Ok(outputs)
+}
+
+pub(crate) fn load_gltf_buffers(source: &Path, gltf: &gltf::Gltf) -> Result<Vec<Vec<u8>>> {
+    let root = source
+        .canonicalize()?
+        .parent()
+        .ok_or("source parent missing")?
+        .to_owned();
+    let mut buffers = Vec::new();
+    for buffer in gltf.buffers() {
+        let data = match buffer.source() {
+            gltf::buffer::Source::Bin => gltf.blob.clone().ok_or("GLB binary chunk required")?,
+            gltf::buffer::Source::Uri(uri) => read_buffer(&root, uri)?,
+        };
+        if data.len() < buffer.length() {
+            return Err("buffer is shorter than declared byteLength".into());
+        }
+        buffers.push(data);
+    }
+    Ok(buffers)
 }
 
 fn read_buffer(root: &Path, uri: &str) -> Result<Vec<u8>> {

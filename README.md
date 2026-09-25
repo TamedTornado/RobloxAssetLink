@@ -40,8 +40,9 @@ scenes. See [offline bundles](docs/offline-bundles.md). This does not publish or
 claim native engine acceptance.
 
 `roblox convert animation` converts canonical rest-relative clip JSON to native
-KeyframeSequence models, also available in offline bundles. FBX/glTF clip import
-is not implemented yet. See [animation conversion](docs/animation-format.md).
+KeyframeSequence models, also available in offline bundles. `animation-gltf`
+imports rigid LINEAR glTF/GLB skeletal clips with explicit rig selection and metric
+conversion. FBX clips remain unimplemented. See [animation conversion](docs/animation-format.md).
 
 ## Executables and current scope
 

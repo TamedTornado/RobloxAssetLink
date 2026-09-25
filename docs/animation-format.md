@@ -30,7 +30,40 @@ CLI and bundle integration tests independently decode the resulting scene,
 check the animation reference, deterministic artifacts, source preservation,
 no-overwrite behavior and failed-build cleanup.
 
-Remaining: source clip adapters, rig binding against imported skeletons,
-interpolation/sampling conversion, supported scale/morph policy and native
-playback acceptance. No FBX/glTF animation converter is claimed yet; the CLI
-requires canonical rest-relative JSON. Issue 4 remains open.
+## glTF / GLB source clips
+
+`roblox convert animation-gltf motion.glb --config animation.json --output motion.rbxm`
+imports rigid LINEAR translation/rotation tracks. A bundle can use conversion
+kind `animationGltf` with the same source/config. Configuration explicitly gives
+`animationIndex`, `rootNode`, `metresPerStud`, `name`, `looped` and `priority`.
+No frame-rate or resource limit is invented: the timeline is the sorted union
+of source key times, preserving seconds. Translation uses linear interpolation;
+rotation uses normalized, shortest-path quaternion SLERP. Track endpoints clamp
+outside their own time range. This preserves the supported source curves without
+introducing a fixed-rate sampling policy.
+
+The selected subtree must contain uniquely named joints with unscaled TRS rest
+transforms. Every selected clip channel must belong to it. No source nodes are
+silently removed or retargeted. Source right-handed Y-up coordinates are retained;
+metres become studs at the boundary. Each output pose is
+`inverse(localRest) * localAnimated`, not the absolute source transform. The
+result manifest records node indices, parents, names and local rest CFrames for
+binding against a target Bone hierarchy. The target must use that hierarchy/rest
+data; an arbitrary existing rig is not automatically compatible.
+
+The importer rejects STEP/CUBICSPLINE, scale/morph channels, matrix rest
+transforms, extensions, malformed times/rotations, ambiguous joint names,
+out-of-rig channels and remote/escaped buffers. glTF has no standard clip event
+marker field; canonical JSON supports explicit markers separately. It does not
+create MeshParts/Bones or bind skin weights yet.
+
+Tests use a hand-authored metric fixture with a rotated rest pose and mismatched
+translation/rotation key times. They check midpoint SLERP, rest-relative offsets,
+hierarchy, GLB/external-buffer equivalence, native CFrame decoding, CLI/bundle
+equivalence and rejection paths. These checks are not playback acceptance.
+
+Semantics follow the [glTF animation specification](https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html#animations)
+and [Bone transform documentation](https://create.roblox.com/docs/reference/engine/classes/Bone).
+
+Remaining: FBX clips, broader interpolation profiles, integration with imported
+skin/Bone instances and native playback acceptance. Issue 4 remains open.

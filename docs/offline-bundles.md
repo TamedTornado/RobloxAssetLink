@@ -5,7 +5,8 @@ and assembles native scenes in one local invocation. The plan contains `assets`
 and `scenes` lists, each with explicit logical ids. Asset conversions select
 `mesh`, `texture` or `audio` and supply the corresponding JSON configuration.
 `animation` accepts canonical rest-relative clip JSON and emits a native
-KeyframeSequence; it does not yet import FBX/glTF clips.
+KeyframeSequence. `animationGltf` imports the explicit rigid LINEAR glTF/GLB
+profile described in [animation conversion](animation-format.md).
 Scene sources use the existing typed scene format and compiler gate.
 
 Input paths are relative to the plan directory. Absolute paths, source escapes,

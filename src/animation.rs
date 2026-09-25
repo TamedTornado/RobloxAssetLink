@@ -156,15 +156,19 @@ pub struct Manifest {
 
 /// Convert canonical rest-relative JSON, not arbitrary source-node animation.
 pub fn convert(source: &Path, output: &Path) -> Result<Manifest> {
+    let source = fs::read(source)?;
+    let clip: Clip = serde_json::from_slice(&source)?;
+    write_clip(&source, &clip, output)
+}
+
+pub(crate) fn write_clip(source: &[u8], clip: &Clip, output: &Path) -> Result<Manifest> {
     if output.extension().and_then(|s| s.to_str()) != Some("rbxm") {
         return Err("native animation output requires the .rbxm extension".into());
     }
-    let source = fs::read(source)?;
-    let clip: Clip = serde_json::from_slice(&source)?;
-    let bytes = encode(&clip)?;
+    let bytes = encode(clip)?;
     let manifest = Manifest {
         format: "rbxm-keyframe-sequence",
-        source_sha256: format!("{:x}", Sha256::digest(&source)),
+        source_sha256: format!("{:x}", Sha256::digest(source)),
         sha256: format!("{:x}", Sha256::digest(&bytes)),
         keyframes: clip.frames.len(),
         bytes: bytes.len(),

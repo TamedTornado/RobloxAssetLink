@@ -1,0 +1,8 @@
+{
+  "animationIndex": 0,
+  "rootNode": 0,
+  "metresPerStud": 0.28,
+  "name": "Motion",
+  "looped": true,
+  "priority": "Action"
+}

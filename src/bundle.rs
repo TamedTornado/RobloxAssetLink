@@ -25,6 +25,10 @@ pub struct Asset {
 #[derive(Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 pub enum Conversion {
+    AnimationGltf {
+        source: PathBuf,
+        config: crate::animation_gltf::Config,
+    },
     Animation {
         source: PathBuf,
     },
@@ -97,6 +101,19 @@ fn key(id: &str) -> String {
 
 fn build_asset(root: &Path, output: &Path, asset: &Asset) -> Result<Vec<String>> {
     match &asset.conversion {
+        Conversion::AnimationGltf { source, config } => {
+            fs::create_dir(output)?;
+            let manifest = crate::animation_gltf::convert(
+                &local(root, source)?,
+                &output.join("animation.rbxm"),
+                config.clone(),
+            )?;
+            fs::write(
+                output.join("manifest.json"),
+                serde_json::to_vec_pretty(&manifest)?,
+            )?;
+            Ok(vec!["animation.rbxm".into()])
+        }
         Conversion::Animation { source } => {
             fs::create_dir(output)?;
             let manifest =
