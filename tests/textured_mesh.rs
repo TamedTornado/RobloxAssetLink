@@ -31,6 +31,20 @@ fn independent_textured_glb_preserves_uvs_and_material_dependencies_through_bund
     .into();
     let source = temp.path().join("source.gltf");
     fs::write(&source, document.to_string()).unwrap();
+    let mut dds_policy = config();
+    dds_policy.materials.as_mut().unwrap().outputs.color =
+        roblox_asset_link::texture::Output::DdsRgba8 {
+            mipmaps: true,
+            max_output_bytes: 1048576,
+            mip_filter: roblox_asset_link::texture_rgba::Filter::ColorStraightAlpha,
+        };
+    let dds_output = temp.path().join("dds");
+    let dds = convert(&source, &dds_output, &dds_policy).unwrap();
+    let dds_material = &dds.materials[0];
+    let map = &dds_material.artifact.maps["color"];
+    assert!(map.file.ends_with("color.dds"));
+    let bytes = fs::read(dds_output.join(&dds_material.directory).join(&map.file)).unwrap();
+    assert_eq!(&bytes[..4], b"DDS ");
     let output = temp.path().join("out");
     let result = convert(&source, &output, &config()).unwrap();
     assert_eq!(result.materials.len(), 1);

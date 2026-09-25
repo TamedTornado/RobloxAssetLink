@@ -16,7 +16,7 @@ pub struct Config {
     pub output: Output,
 }
 
-#[derive(Default, Deserialize)]
+#[derive(Clone, Copy, Default, Deserialize, Serialize)]
 #[serde(tag = "format", rename_all = "camelCase", deny_unknown_fields)]
 pub enum Output {
     #[serde(rename_all = "camelCase")]

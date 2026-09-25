@@ -125,6 +125,20 @@ extracts one selected core metallic/roughness material. Configuration requires
 `maxDecodedBytes`. Bundle conversion kind `materialGltf` accepts the same source
 and config, relinks dependencies, and supports the same scene material attachment.
 
+Optional `outputs` selects the final encoding independently for `color`, `normal`,
+`roughness` and `metalness`. When provided, all four fields are required, each
+using a texture output object such as `{"format":"png"}` or the explicit DDS
+profiles above. If omitted, all maps use PNG. The same `outputs` object is accepted
+inside static mesh conversion's `materials` policy, so a GLB-to-mesh build does not
+discard the caller's texture choices. CLI, bundle and material dependency hashes
+operate on the chosen final artifacts. Material baking still uses temporary PNG
+intermediates for exact normalized samples; these are not published dependencies.
+
+For example, color can use RGBA DDS with a selected alpha filter, roughness BC4,
+metalness L8, and normals PNG. Incompatible operation/filter combinations fail in
+the shared texture converter rather than being reinterpreted. Source material
+semantics and sampler restrictions below remain unchanged by output selection.
+
 Following the [glTF material specification](https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html#materials),
 base RGB samples are decoded from sRGB, multiplied by linear base-color factors,
 then encoded back to 8-bit sRGB. Alpha is multiplied without gamma conversion;

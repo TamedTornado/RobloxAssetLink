@@ -26,6 +26,8 @@ pub struct MaterialConfig {
     pub max_width: u32,
     pub max_height: u32,
     pub max_decoded_bytes: u64,
+    #[serde(default)]
+    pub outputs: crate::material_gltf::Outputs,
 }
 
 #[derive(Serialize)]
@@ -475,6 +477,7 @@ pub(crate) fn convert_linked(
                         max_width: policy.max_width,
                         max_height: policy.max_height,
                         max_decoded_bytes: policy.max_decoded_bytes,
+                        outputs: policy.outputs.clone(),
                     },
                 )?;
                 materials.push(MaterialEntry {

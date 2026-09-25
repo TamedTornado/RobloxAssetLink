@@ -1,9 +1,9 @@
 //! Uncompressed RGBA DDS with explicit color/normal mip semantics.
 use crate::Result;
 use image::{Rgba, RgbaImage};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Copy, Deserialize)]
+#[derive(Clone, Copy, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum Filter {
     ColorStraightAlpha,

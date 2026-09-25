@@ -12,6 +12,7 @@ fn config() -> Config {
         max_width: 2,
         max_height: 2,
         max_decoded_bytes: 4096,
+        outputs: Default::default(),
     }
 }
 
@@ -28,6 +29,62 @@ fn input(root: &Path) -> Value {
         "baseColorFactor":[0.5,0.25,1,0.5],"baseColorTexture":{"index":0},
         "metallicFactor":0.5,"roughnessFactor":0.5,"metallicRoughnessTexture":{"index":1}
     }}]})
+}
+
+#[test]
+fn gltf_material_output_profiles_survive_bundle_linking_and_native_serialization() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    let source = input(root);
+    fs::write(root.join("source.gltf"), source.to_string()).unwrap();
+    let profiles = json!({
+        "color":{"format":"ddsRgba8","mipmaps":true,"maxOutputBytes":140,"mipFilter":"colorPremultipliedAlpha"},
+        "normal":{"format":"png"},
+        "roughness":{"format":"ddsBc4","mipmaps":true,"maxOutputBytes":136},
+        "metalness":{"format":"ddsL8","mipmaps":false,"maxOutputBytes":129}
+    });
+    let config = json!({"materialIndex":0,"name":"Paint","localUriPrefix":"rbxasset://paint/",
+        "maxWidth":2,"maxHeight":2,"maxDecodedBytes":4096,"outputs":profiles});
+    let parsed: Config = serde_json::from_value(config.clone()).unwrap();
+    let standalone = root.join("standalone");
+    let material = convert(&root.join("source.gltf"), &standalone, &parsed).unwrap();
+    for map in material.maps.values() {
+        assert!(map.file.ends_with(".dds"));
+    }
+    let plan = json!({"assets":[{"id":"paint","conversion":{"kind":"materialGltf","source":"source.gltf","config":config}}],"scenes":[]});
+    fs::write(root.join("build.json"), plan.to_string()).unwrap();
+    let bundle = root.join("bundle");
+    let manifest = roblox_asset_link::bundle::build(&root.join("build.json"), &bundle).unwrap();
+    for map in material.maps.values() {
+        let file = manifest
+            .files
+            .iter()
+            .find(|file| file.file == map.file)
+            .unwrap();
+        assert_eq!(
+            fs::read(standalone.join(&map.file)).unwrap(),
+            fs::read(bundle.join(&file.path)).unwrap()
+        );
+    }
+    let model = manifest
+        .files
+        .iter()
+        .find(|file| file.file == "material.rbxm")
+        .unwrap();
+    let dom =
+        rbx_binary::from_reader(fs::read(bundle.join(&model.path)).unwrap().as_slice()).unwrap();
+    let instance = dom.get_by_ref(dom.root().children()[0]).unwrap();
+    let color = manifest
+        .files
+        .iter()
+        .find(|file| file.file.ends_with("color.dds"))
+        .unwrap();
+    assert_eq!(
+        instance.properties[&"ColorMapContent".into()],
+        rbx_dom_weak::types::Variant::Content(rbx_dom_weak::types::Content::from_uri(
+            &color.local_uri
+        ))
+    );
 }
 
 #[test]

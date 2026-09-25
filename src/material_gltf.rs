@@ -15,6 +15,17 @@ pub struct Config {
     pub max_width: u32,
     pub max_height: u32,
     pub max_decoded_bytes: u64,
+    #[serde(default)]
+    pub outputs: Outputs,
+}
+
+#[derive(Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct Outputs {
+    pub color: texture::Output,
+    pub normal: texture::Output,
+    pub roughness: texture::Output,
+    pub metalness: texture::Output,
 }
 
 fn image_bytes(source: &Path, gltf: &gltf::Gltf, image: gltf::Image<'_>) -> Result<Vec<u8>> {
@@ -212,9 +223,9 @@ pub(crate) fn convert_linked(
     roughness.save(root.join("roughness.png"))?;
     metalness.save(root.join("metalness.png"))?;
     let mut operations = vec![
-        ("color.png", "color"),
-        ("roughness.png", "roughness"),
-        ("metalness.png", "metalness"),
+        ("color.png", "color", config.outputs.color),
+        ("roughness.png", "roughness", config.outputs.roughness),
+        ("metalness.png", "metalness", config.outputs.metalness),
     ];
     if let Some(normal) = normal {
         pixels(
@@ -226,10 +237,10 @@ pub(crate) fn convert_linked(
             "normal",
         )?
         .save(root.join("normal.png"))?;
-        operations.push(("normal.png", "normalOpenGl"));
+        operations.push(("normal.png", "normalOpenGl", config.outputs.normal));
     }
-    let maps: Vec<_> = operations.into_iter().map(|(file, operation)| json!({"source":file,"config":{
-        "operation":operation,"maxWidth":config.max_width,"maxHeight":config.max_height,"maxDecodedBytes":config.max_decoded_bytes
+    let maps: Vec<_> = operations.into_iter().map(|(file, operation, output)| json!({"source":file,"config":{
+        "operation":operation,"output":output,"maxWidth":config.max_width,"maxHeight":config.max_height,"maxDecodedBytes":config.max_decoded_bytes
     }})).collect();
     let specification = json!({"name":config.name,"alphaMode":"Transparency","color":[1,1,1],"localUriPrefix":config.local_uri_prefix,"maps":maps});
     let document = root.join("material.json");
