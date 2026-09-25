@@ -16,6 +16,54 @@ fn specification() -> Value {
 }
 
 #[test]
+fn scalar_dds_material_bundle_keeps_native_links_and_budget_failures_atomic() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    image::GrayImage::from_raw(3, 1, vec![0, 128, 255])
+        .unwrap()
+        .save(root.join("scalar.png"))
+        .unwrap();
+    let mut spec = specification();
+    spec["maps"] = json!([{"source":"scalar.png", "config":{
+        "operation":"roughness", "maxWidth":3,"maxHeight":1,"maxDecodedBytes":4096,
+        "output":{"format":"ddsL8", "mipmaps":true,"maxOutputBytes":132}
+    }}]);
+    let source = root.join("material.json");
+    fs::write(&source, spec.to_string()).unwrap();
+    let plan = json!({"assets":[{"id":"paint","conversion":{"kind":"material","source":"material.json"}}],"scenes":[]});
+    fs::write(root.join("build.json"), plan.to_string()).unwrap();
+    let output = root.join("bundle");
+    let manifest = roblox_asset_link::bundle::build(&root.join("build.json"), &output).unwrap();
+    let texture = manifest
+        .files
+        .iter()
+        .find(|file| file.file.ends_with("roughness.dds"))
+        .unwrap();
+    let model = manifest
+        .files
+        .iter()
+        .find(|file| file.file == "material.rbxm")
+        .unwrap();
+    let bytes = fs::read(output.join(&model.path)).unwrap();
+    let dom = rbx_binary::from_reader(bytes.as_slice()).unwrap();
+    let appearance = dom.get_by_ref(dom.root().children()[0]).unwrap();
+    assert_eq!(
+        appearance.properties[&"RoughnessMapContent".into()],
+        Variant::Content(Content::from_uri(&texture.local_uri))
+    );
+    assert_eq!(
+        &fs::read(output.join(&texture.path)).unwrap()[128..],
+        &[0, 128, 255, 128]
+    );
+
+    spec["maps"][0]["config"]["output"]["maxOutputBytes"] = json!(131);
+    fs::write(&source, spec.to_string()).unwrap();
+    assert!(convert(&source, &root.join("bad")).is_err());
+    assert!(!root.join("bad").exists());
+    assert!(root.join("scalar.png").is_file());
+}
+
+#[test]
 fn material_native_properties_maps_and_deterministic_cli_output() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();

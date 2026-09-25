@@ -12,6 +12,20 @@ pub struct Config {
     pub max_width: u32,
     pub max_height: u32,
     pub max_decoded_bytes: u64,
+    #[serde(default)]
+    pub output: Output,
+}
+
+#[derive(Default, Deserialize)]
+#[serde(tag = "format", rename_all = "camelCase", deny_unknown_fields)]
+pub enum Output {
+    #[default]
+    Png,
+    #[serde(rename_all = "camelCase")]
+    DdsL8 {
+        mipmaps: bool,
+        max_output_bytes: u64,
+    },
 }
 
 #[derive(Deserialize)]
@@ -45,6 +59,14 @@ pub struct Texture {
 }
 
 pub fn convert(source: &Path, output: &Path, config: &Config) -> Result<Manifest> {
+    if matches!(config.output, Output::DdsL8 { .. })
+        && !matches!(
+            config.operation,
+            Operation::Roughness | Operation::Metalness | Operation::GltfMetallicRoughness
+        )
+    {
+        return Err("ddsL8 output requires linear scalar roughness/metalness maps".into());
+    }
     if config.max_width == 0 || config.max_height == 0 || config.max_decoded_bytes == 0 {
         return Err("texture decode limits must be positive".into());
     }
@@ -122,10 +144,25 @@ pub fn convert(source: &Path, output: &Path, config: &Config) -> Result<Manifest
     let mut files = Vec::new();
     let mut textures = Vec::new();
     for (semantic, color_space, image) in images {
-        let mut bytes = Cursor::new(Vec::new());
-        image.write_to(&mut bytes, ImageFormat::Png)?;
-        let bytes = bytes.into_inner();
-        let file = format!("{semantic}.png");
+        let (extension, bytes) = match config.output {
+            Output::Png => {
+                let mut bytes = Cursor::new(Vec::new());
+                image.write_to(&mut bytes, ImageFormat::Png)?;
+                ("png", bytes.into_inner())
+            }
+            Output::DdsL8 {
+                mipmaps,
+                max_output_bytes,
+            } => (
+                "dds",
+                crate::texture_dds::encode(
+                    image.as_luma8().ok_or("DDS scalar image expected")?,
+                    mipmaps,
+                    max_output_bytes,
+                )?,
+            ),
+        };
+        let file = format!("{semantic}.{extension}");
         textures.push(Texture {
             file: file.clone(),
             sha256: format!("{:x}", Sha256::digest(&bytes)),

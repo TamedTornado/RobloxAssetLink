@@ -83,6 +83,7 @@ fn pixels(
             max_width: config.max_width,
             max_height: config.max_height,
             max_decoded_bytes: config.max_decoded_bytes,
+            output: texture::Output::Png,
         },
     )?;
     Ok(image::open(output.join("color.png"))?.to_rgba8())

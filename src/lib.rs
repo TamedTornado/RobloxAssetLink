@@ -36,6 +36,7 @@ pub mod terrain_heightmap;
 pub mod terrain_physics;
 pub mod terrain_voxels;
 pub mod texture;
+mod texture_dds;
 mod vertex_attributes;
 pub mod video;
 use config::{Config, PartSettings};

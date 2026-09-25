@@ -10,6 +10,22 @@ The allocation limit applies to the decoder, not an OS process-memory quota.
 No resizing is performed. Unsupported high bit depths, ICC profiles and EXIF
 orientation fail explicitly rather than silently changing their meaning.
 
+Output defaults to PNG. Linear roughness/metalness maps can explicitly select
+`"output":{"format":"ddsL8","mipmaps":true,"maxOutputBytes":1048576}`.
+The budget is caller-supplied and applies to each emitted DDS including its header
+and every mip level. This profile emits native uncompressed 8-bit luminance DDS,
+not a compressed TexturePack. Setting `mipmaps` false emits only the base level.
+Color and normal maps reject this scalar-only output profile.
+
+Mip levels use linear area-weighted scalar averaging with nearest-integer
+quantization at each level. Odd dimensions include all edge texels; dimensions
+halve (floor, minimum one) through 1 × 1. No color gamma, normal renormalization,
+or guessed normal-channel swizzle is applied to these scalar maps. Independent
+FFmpeg decoding checks the base level; format-header and exact mip-byte tests
+check the chain, deterministic bytes and configured budget. Material/bundle tests
+verify native local DDS references and atomic failure cleanup. Renderer acceptance
+is still unverified. Compressed/color/normal DDS profiles remain unfinished.
+
 Operations:
 
 - `color`: preserve 8-bit RGBA, including alpha; input samples must already be
@@ -177,8 +193,9 @@ a real native DDS ingestion path, not that every surface must use DDS or that
 every device supports the same payload.
 
 **Implementation consequence:** PNG normalization is not yet the whole offline
-texture pipeline. Add explicitly selected native DDS/mipmap outputs with semantic
-filtering and independent decoding tests; do not silently replace PNGs with a
+texture pipeline. The scalar DDS/mipmap profile above starts the native-output
+implementation; compressed/color/normal profiles still need semantic filtering
+and independent decoding tests. Do not silently replace PNGs with a
 guessed platform cache. Keep TexturePack material descriptors separate from pixel
 encoding. Further evidence is needed for the marked normal encoding and the
 renderer/TexturePack relationship. Issue 5 remains open.

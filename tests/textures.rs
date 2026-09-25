@@ -8,7 +8,66 @@ fn config(operation: Operation) -> Config {
         max_width: 2,
         max_height: 2,
         max_decoded_bytes: 4096,
+        output: roblox_asset_link::texture::Output::Png,
     }
+}
+
+#[test]
+fn native_scalar_dds_cli_is_decodable_and_rejects_wrong_semantics() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    image::GrayImage::from_raw(3, 1, vec![0, 128, 255])
+        .unwrap()
+        .save(root.join("scalar.png"))
+        .unwrap();
+    let config = serde_json::json!({
+        "operation":"roughness", "maxWidth":3, "maxHeight":1,
+        "maxDecodedBytes":4096,
+        "output":{"format":"ddsL8", "mipmaps":true, "maxOutputBytes":132}
+    });
+    fs::write(root.join("config.json"), config.to_string()).unwrap();
+    let result = Command::new(env!("CARGO_BIN_EXE_roblox"))
+        .env_clear()
+        .args(["convert", "texture"])
+        .arg(root.join("scalar.png"))
+        .arg("--config")
+        .arg(root.join("config.json"))
+        .arg("--output")
+        .arg(root.join("out"))
+        .output()
+        .unwrap();
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    let path = root.join("out/roughness.dds");
+    assert_eq!(&fs::read(&path).unwrap()[128..], &[0, 128, 255, 128]);
+
+    // Independent native library decoder, not a reader paired with our encoder.
+    ffmpeg_next::init().unwrap();
+    let mut input = ffmpeg_next::format::input(&path).unwrap();
+    let mut decoder = ffmpeg_next::codec::context::Context::from_parameters(
+        input.stream(0).unwrap().parameters(),
+    )
+    .unwrap()
+    .decoder()
+    .video()
+    .unwrap();
+    let mut packet = ffmpeg_next::Packet::empty();
+    packet.read(&mut input).unwrap();
+    decoder.send_packet(&packet).unwrap();
+    let mut frame = ffmpeg_next::frame::Video::empty();
+    decoder.receive_frame(&mut frame).unwrap();
+    assert_eq!((frame.width(), frame.height()), (3, 1));
+    assert_eq!(frame.format(), ffmpeg_next::format::Pixel::GRAY8);
+    assert_eq!(&frame.data(0)[..3], &[0, 128, 255]);
+
+    let mut wrong = config;
+    wrong["operation"] = serde_json::json!("color");
+    let parsed: Config = serde_json::from_value(wrong).unwrap();
+    assert!(convert(&root.join("scalar.png"), &root.join("bad"), &parsed).is_err());
+    assert!(!root.join("bad").exists());
 }
 
 #[test]
