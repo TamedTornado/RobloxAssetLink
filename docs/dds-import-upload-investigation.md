@@ -52,9 +52,20 @@ as evidence identifying the upload validator.
 ## Independent control: Roblox's own DDS fails the same upload
 
 The test uploaded the **unchanged** installed file
-`content/textures/noise.dds` as Image, with its honest MIME type
-`image/vnd-ms.dds` and expectedPrice 0. No rename, header modification, conversion
-or alternate MIME disguise was used.
+`content/textures/noise.dds` as Image with expectedPrice 0. The first request
+misspelled the MIME type as `image/vnd-ms.dds`. Microsoft documents
+[`image/vnd.ms-dds`](https://learn.microsoft.com/en-us/windows/win32/wic/dds-format-overview).
+Repeating the unchanged file with that correct MIME type produced operation
+`171de8ad-0c33-4b17-bd09-38ad0e891006`, which also completed with
+`InvalidArgument / Unsupported image format.` No asset was created. No rename,
+header modification, conversion or alternate MIME disguise was used.
+
+Independent web confirmation: Roblox's
+[Assets API guide](https://create.roblox.com/docs/cloud/guides/usage-assets)
+lists PNG, JPEG, BMP and TGA for Image/Decal uploads, not DDS. Its
+[Studio texture requirements](https://create.roblox.com/docs/art/modeling/texture-specifications)
+likewise exclude DDS. These establish the documented public upload boundary,
+not that every internal Roblox endpoint necessarily rejects DDS.
 
 - SHA-256: `2a7ce8c77df2a3fb99ba70630019c33976a3714b7d17a103f60c55c488e72435`.
 - 32 × 32, uncompressed 32-bit ARGB8888, one mip level; legacy DDS header.

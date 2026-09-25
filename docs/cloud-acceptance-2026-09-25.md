@@ -8,6 +8,53 @@ see [the focused investigation](dds-import-upload-investigation.md).
 
 ## Current publishing outcome
 
+### Four individual maps, no authored TexturePack
+
+Following Jason's direction, the next test uploaded four original 64-by-64 PNGs
+and referenced them individually on a SurfaceAppearance. Color uses a cyan/red
+checker, normal alternates tilted tangent-space vectors, roughness splits smooth
+and rough halves, and metalness splits nonmetal and metal halves.
+
+All four images became Active/Approved:
+
+| Map | Asset ID |
+| --- | --- |
+| Color | 121746111803604 |
+| Normal | 95213658056821 |
+| Roughness | 136450311959603 |
+| Metalness | 118473853785120 |
+
+The locally assembled place contained all four explicit Content references and
+no TexturePack property. The dedicated place API published it as **version 5**
+of acceptance place `99388199272385`. Downloading that exact version preserved
+the entire input byte-for-byte, SHA-256
+`48c609b48d688a533b1a5b28ffe9dadd055ad73dfee2a05ca425e7af36a46b6c`.
+There was no baked pack added to the downloaded place.
+
+An isolated Studio run opened those downloaded bytes, checked all four material
+properties against the expected IDs, and successfully preloaded each map through
+a typed ImageLabel plus the MeshPart. It exited normally. This establishes image
+availability and retained material inputs, not per-map shading or pack generation.
+The first throwaway probe incorrectly used raw-string preloads and callback
+assertions swallowed by ContentProvider; its apparent PASS was rejected. The
+corrected probe uses typed image loads, requires nonempty outcomes and checks
+statuses outside callbacks, consistent with the maintained acceptance fixture.
+
+Five uploaded model controls were rendered by Roblox's thumbnail service:
+color only `120020145252762`, four maps `127180815706679`, color plus normal
+`73540029245248`, color plus roughness `131541279476695`, and color plus metalness
+`116041201491151`. Their completed thumbnails all show the color checker and
+have identical decoded pixels. Thus this thumbnail fixture does **not** prove
+normal/roughness/metalness effects or automatic material baking. An initial
+black display in the inspection tool was not a black downloaded image; pixel
+inspection corrected that observation. No claim of complete PBR visual acceptance
+is made. The reason these controls render identically remains undetermined.
+
+DDS compression is now explicitly left to Roblox: deployment uses PNG inputs.
+Video remains out of scope. Neither is an active acceptance blocker.
+
+### Earlier three-way comparison (version 4)
+
 Jason created the private **RobloxToolchain Acceptance** experience through
 Studio, universe `10767994924`, start place `99388199272385`. He explicitly
 approved `universe-places:write` on the existing key restricted to that experience.
