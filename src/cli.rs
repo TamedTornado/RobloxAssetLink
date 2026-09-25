@@ -20,6 +20,11 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
+    /// Assemble native scene artifacts offline from explicitly typed JSON.
+    Build {
+        #[command(subcommand)]
+        command: Build,
+    },
     /// Convert assets locally. No catalog, Studio, credentials or network.
     Convert {
         #[command(subcommand)]
@@ -33,6 +38,15 @@ enum Command {
         catalog: Option<PathBuf>,
         #[command(subcommand)]
         command: Assets,
+    },
+}
+
+#[derive(Subcommand)]
+enum Build {
+    Scene {
+        source: PathBuf,
+        #[arg(long)]
+        output: PathBuf,
     },
 }
 
@@ -99,6 +113,14 @@ enum Assets {
 }
 
 fn execute(cli: Cli) -> Result<Value> {
+    if let Command::Build {
+        command: Build::Scene { source, output },
+    } = &cli.command
+    {
+        return Ok(
+            json!({"ok":true,"scope":"offlineSceneBuild","result":roblox_asset_link::scene::build(source,output)?}),
+        );
+    }
     if let Command::Convert {
         command:
             Convert::Texture {
@@ -145,7 +167,8 @@ fn execute(cli: Cli) -> Result<Value> {
     } = cli.command
     else {
         return Ok(json!({"ok":true,"result":{
-            "commandGroups":["assets","convert"],"assetOperations":["init","add","edit","remove","list","inspect","validate","config"],
+            "commandGroups":["assets","convert","build"],"assetOperations":["init","add","edit","remove","list","inspect","validate","config"],
+            "offlineSceneSerialization":true,
             "offlineConversion":["static-gltf-to-mesh-v2","static-fbx-to-mesh-v2","static-obj-to-mesh-v2","textures-to-png","collision-to-csgphs-v5"],"offlineGameBuild":false,
             "serverExecutable":"roblox-server","requiresStudioForCatalog":false,
             "persistentStudioImport":false,"studioCommandExecution":false

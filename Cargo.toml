@@ -28,6 +28,9 @@ base64 = "0.22"
 percent-encoding = "2"
 parry3d = { version = "=0.31.1", features = ["enhanced-determinism"] }
 image = { version = "=0.25.9", default-features = false, features = ["png", "jpeg", "bmp", "tga"] }
+rbx_binary = "=3.0.0"
+rbx_dom_weak = "=4.2.0"
+rbx_reflection_database = "=3.0.0"
 
 [dev-dependencies]
 rbx_mesh = { version = "=0.7.0", default-features = false, features = ["mesh", "union-physics"] }

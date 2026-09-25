@@ -1,0 +1,22 @@
+{
+  "kind": "model",
+  "roots": [
+    {
+      "id": "model",
+      "class": "Model",
+      "name": "Example",
+      "properties": {},
+      "references": {"PrimaryPart": "part"},
+      "children": [
+        {
+          "id": "part",
+          "class": "Part",
+          "name": "Block",
+          "properties": {"Anchored": {"Bool": true}},
+          "references": {},
+          "children": []
+        }
+      ]
+    }
+  ]
+}
