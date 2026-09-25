@@ -31,6 +31,17 @@ fn independent_native_terrain_voxels_palette_and_water_survive_place_assembly() 
     };
     let grid_bytes: &[u8] = grid.as_ref();
     assert!(!grid_bytes.is_empty());
+    let limits = roblox_asset_link::terrain_grid::Limits {
+        max_chunks: 16,
+        max_cells: 524288,
+    };
+    let cells = roblox_asset_link::terrain_grid::decode(grid_bytes, &limits).unwrap();
+    let rebuilt = roblox_asset_link::terrain_grid::encode(&cells, &limits).unwrap();
+    assert_eq!(rebuilt, grid_bytes);
+    properties.insert(
+        "SmoothGrid".into(),
+        rbx_dom_weak::types::Variant::BinaryString(rebuilt.into()),
+    );
     let spec = json!({"kind":"place","roots":[{"id":"world","class":"Workspace","name":"Workspace","properties":{},"references":{},"children":[
         {"id":"terrain","class":"Terrain","name":"Terrain","properties":properties,"references":{},"children":[]}
     ]}]});

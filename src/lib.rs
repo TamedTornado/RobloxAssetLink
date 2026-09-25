@@ -30,6 +30,7 @@ pub mod skin;
 mod skin_fbx;
 pub mod skin_import;
 mod source_mesh;
+pub mod terrain_grid;
 pub mod texture;
 mod vertex_attributes;
 pub mod video;
