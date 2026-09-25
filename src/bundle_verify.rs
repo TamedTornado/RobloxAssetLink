@@ -149,6 +149,7 @@ pub fn verify(directory: &Path) -> Result<Verification> {
         return Err("bundle has no runtime artifacts".into());
     }
     let mut native = Vec::new();
+    let mut packs = Vec::new();
     for (path, expected) in entries {
         if !paths.insert(path.clone()) {
             return Err(format!("duplicate bundle artifact path: {path}").into());
@@ -161,7 +162,10 @@ pub fn verify(directory: &Path) -> Result<Verification> {
             Path::new(path).extension().and_then(|s| s.to_str()),
             Some("rbxm" | "rbxl")
         ) {
-            native.push(file);
+            native.push(file.clone());
+        }
+        if Path::new(path).file_name().and_then(|s| s.to_str()) == Some("texturepack.xml") {
+            packs.push(file);
         }
     }
     let mut result = Verification {
@@ -174,6 +178,25 @@ pub fn verify(directory: &Path) -> Result<Verification> {
     };
     for file in native {
         inspect_native(&file, &paths, &mut result)?;
+    }
+    for file in packs {
+        for uri in crate::texture_pack::references(&fs::read(file)?)?.into_values() {
+            let path = uri
+                .strip_prefix("rbxasset://")
+                .ok_or("TexturePack local reference expected")?;
+            relative(path)?;
+            if path.starts_with("assets/") || path.starts_with("scenes/") {
+                if !paths.contains(path) {
+                    return Err(format!(
+                        "TexturePack references an unlisted local bundle artifact: {uri}"
+                    )
+                    .into());
+                }
+                result.owned_references_verified += 1;
+            } else {
+                result.external_references.insert(uri);
+            }
+        }
     }
     Ok(result)
 }

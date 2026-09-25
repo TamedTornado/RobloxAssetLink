@@ -61,6 +61,33 @@ fn scalar_dds_material_bundle_keeps_native_links_and_budget_failures_atomic() {
     assert!(convert(&source, &root.join("bad")).is_err());
     assert!(!root.join("bad").exists());
     assert!(root.join("scalar.png").is_file());
+    let verified = roblox_asset_link::bundle_verify::verify(&output).unwrap();
+    assert!(verified.owned_references_verified >= 3);
+    let pack = manifest
+        .files
+        .iter()
+        .find(|file| file.file == "texturepack.xml")
+        .unwrap();
+    let text = fs::read_to_string(output.join(&pack.path)).unwrap();
+    let modified = text.replace(&texture.local_uri, "rbxasset://assets/missing.dds");
+    fs::write(output.join(&pack.path), modified.as_bytes()).unwrap();
+    let manifest_path = output.join("manifest.json");
+    let mut document: Value = serde_json::from_slice(&fs::read(&manifest_path).unwrap()).unwrap();
+    use sha2::Digest;
+    for entry in document["files"].as_array_mut().unwrap() {
+        if entry["path"] == pack.path {
+            entry["sha256"] = json!(format!("{:x}", sha2::Sha256::digest(modified.as_bytes())));
+        }
+    }
+    fs::write(manifest_path, document.to_string()).unwrap();
+    let error = roblox_asset_link::bundle_verify::verify(&output)
+        .err()
+        .unwrap();
+    assert!(
+        error
+            .to_string()
+            .contains("TexturePack references an unlisted")
+    );
 }
 
 #[test]
@@ -83,6 +110,17 @@ fn material_native_properties_maps_and_deterministic_cli_output() {
     let material = dom.get_by_ref(dom.root().children()[0]).unwrap();
     assert_eq!(material.class.as_str(), "SurfaceAppearance");
     assert_eq!(material.name, "Paint");
+    assert_eq!(
+        material.properties[&"TexturePack".into()],
+        Variant::ContentId(rbx_dom_weak::types::ContentId::from(
+            "rbxasset://kit/paint/texturepack.xml"
+        ))
+    );
+    let pack = fs::read_to_string(out.join(&result.texture_pack.file)).unwrap();
+    assert!(pack.contains("<alphamode>1</alphamode>"));
+    for map in result.maps.values() {
+        assert!(pack.contains(&map.uri));
+    }
     assert_eq!(
         material.properties[&"ColorMapContent".into()],
         Variant::Content(Content::from_uri("rbxasset://kit/paint/map-0/color.png"))
@@ -135,6 +173,7 @@ fn material_native_properties_maps_and_deterministic_cli_output() {
     );
     for file in [
         "material.rbxm",
+        "texturepack.xml",
         "manifest.json",
         "map-0/color.png",
         "map-1/roughness.png",

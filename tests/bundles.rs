@@ -168,7 +168,7 @@ fn material_bundle_relinks_every_native_map_to_the_actual_artifact_location() {
     fs::write(&source, plan.to_string()).unwrap();
     let output = root.join("out");
     let manifest = build(&source, &output).unwrap();
-    assert_eq!(manifest.files.len(), 2);
+    assert_eq!(manifest.files.len(), 3);
     let model = manifest
         .files
         .iter()

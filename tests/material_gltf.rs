@@ -152,7 +152,7 @@ fn gltf_factors_bake_in_correct_color_spaces_and_bundle_links_the_result() {
     fs::write(root.join("build.json"), plan.to_string()).unwrap();
     let bundle = root.join("bundle");
     let built = roblox_asset_link::bundle::build(&root.join("build.json"), &bundle).unwrap();
-    assert_eq!(built.files.len(), 4);
+    assert_eq!(built.files.len(), 5);
     let native = built
         .files
         .iter()

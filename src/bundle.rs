@@ -254,6 +254,7 @@ fn build_asset(
                 Some(uri_prefix),
             )?;
             let mut files = vec!["material.rbxm".to_owned()];
+            files.push(manifest.texture_pack.file);
             files.extend(manifest.maps.into_values().map(|map| map.file));
             Ok(files)
         }
@@ -261,6 +262,7 @@ fn build_asset(
             let manifest =
                 crate::material::convert_linked(&local(root, source)?, output, Some(uri_prefix))?;
             let mut files = vec!["material.rbxm".to_owned()];
+            files.push(manifest.texture_pack.file);
             files.extend(manifest.maps.into_values().map(|map| map.file));
             Ok(files)
         }
@@ -336,6 +338,10 @@ fn build_asset(
             }
             for material in manifest.materials {
                 files.push(format!("{}/material.rbxm", material.directory));
+                files.push(format!(
+                    "{}/{}",
+                    material.directory, material.artifact.texture_pack.file
+                ));
                 files.extend(
                     material
                         .artifact

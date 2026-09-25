@@ -2,7 +2,7 @@
 use crate::{Result, texture};
 use rbx_dom_weak::{
     InstanceBuilder, WeakDom,
-    types::{Color3, Content, Enum},
+    types::{Color3, Content, ContentId, Enum},
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -46,7 +46,16 @@ pub struct Manifest {
     pub format: &'static str,
     pub sha256: String,
     pub maps: BTreeMap<String, Dependency>,
+    pub texture_pack: PackDependency,
     pub engine_verified: bool,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PackDependency {
+    pub file: String,
+    pub uri: String,
+    pub sha256: String,
 }
 
 fn validate(spec: &Specification) -> Result<Enum> {
@@ -163,6 +172,20 @@ pub(crate) fn convert_linked(
                 );
             }
         }
+        let pack = crate::texture_pack::encode(
+            alpha.to_u32(),
+            &maps
+                .iter()
+                .map(|(semantic, map)| (semantic.clone(), map.uri.clone()))
+                .collect(),
+        )?;
+        let texture_pack = PackDependency {
+            file: "texturepack.xml".into(),
+            uri: format!("{}texturepack.xml", spec.local_uri_prefix),
+            sha256: format!("{:x}", Sha256::digest(&pack)),
+        };
+        appearance =
+            appearance.with_property("TexturePack", ContentId::from(texture_pack.uri.clone()));
         let dom = WeakDom::new(appearance);
         let mut bytes = Vec::new();
         rbx_binary::Serializer::new()
@@ -172,9 +195,11 @@ pub(crate) fn convert_linked(
             format: "roblox-surface-appearance",
             sha256: format!("{:x}", Sha256::digest(&bytes)),
             maps,
+            texture_pack,
             engine_verified: false,
         };
         fs::write(output.join("material.rbxm"), bytes)?;
+        fs::write(output.join("texturepack.xml"), pack)?;
         fs::write(
             output.join("manifest.json"),
             serde_json::to_vec_pretty(&manifest)?,

@@ -46,7 +46,7 @@ only to lower levels. The DDS uses ordinary RGBA8 masks and no proprietary swizz
 Its legacy header does not carry an sRGB tag; interpretation remains the material
 map's semantic, as recorded in the texture manifest. Independent FFmpeg decoding
 checks base RGBA/alpha; known-value tests cover gamma, alpha policy and normal
-renormalization. Color/normal block compression and TexturePack remain unfinished.
+renormalization. Color/normal block compression remains unfinished.
 
 The same scalar operations also accept `"format":"ddsBc4"`, with the same
 required `mipmaps` and `maxOutputBytes` fields. This emits unsigned BC4 blocks
@@ -78,8 +78,8 @@ These require OpenGL tangent normals and grayscale metalness/roughness maps.
 PNG, DDS, MP3 and Ogg samples also exist in the locally installed Studio content;
 their presence is not proof of cloud upload behavior or of every client target.
 
-Mesh/material dependency integration is implemented below. Still open are
-mipmap/platform-cache requirements and TexturePack encoding/semantics. Color
+Mesh/material dependency integration and the local TexturePack profile are
+implemented below. Broader platform-cache profiles remain unverified. Color
 management and HDR remain explicitly unsupported profiles. Passing pixel tests
 does not close the full image/material issue.
 
@@ -89,6 +89,20 @@ does not close the full image/material issue.
 `material.rbxm` SurfaceAppearance, normalized maps and a dependency/hash manifest.
 It uses the documented [SurfaceAppearance properties](https://create.roblox.com/docs/reference/engine/classes/SurfaceAppearance)
 and the pinned reflection database for serialization and AlphaMode values.
+
+It also emits `texturepack.xml`, a native unlayered v2 descriptor, and sets the
+serialized `SurfaceAppearance.TexturePack` ContentId to that local artifact.
+The descriptor uses the same map references and alpha mode as the instance.
+Its hash/reference is recorded under `texturePack` in the material manifest.
+Standalone, glTF, mesh-material and bundle paths include the descriptor;
+bundle relinking happens before encoding. No runtime script or Studio
+preprocessing step generates this file.
+
+`verify-bundle` checks descriptor hashes and resolves their channel references.
+It accepts our canonical local descriptor profile, not arbitrary XML, DTDs,
+remote content, layered packs or alternate usages. A regression changes a
+descriptor reference and updates its file hash; verification still rejects the
+dangling dependency. This is not a renderer or publishing attestation.
 
 The specification requires `name`, `alphaMode` (for example `Transparency`),
 `color` (three native Color components in [0,1]), `localUriPrefix` and `maps`.
@@ -188,8 +202,9 @@ Therefore the observed TexturePack v2 path describes texture references and
 material usage rather than packing all pixels into a proprietary image codec.
 This does not establish every referenced image's runtime encoding. Usage-version
 semantics, accepted content-reference forms, target-specific texture processing
-and native acceptance still need verification before shipping a writer. No
-unknown enum meanings or image-compression steps have been guessed into code.
+and native acceptance require separate verification. The implemented writer uses
+only the concrete SurfaceAppearance profile below, not unknown usage enums or
+guessed image-compression steps.
 
 ### SurfaceAppearance-specific descriptor path
 
@@ -213,18 +228,32 @@ Further read-only tracing of the same executable narrows the descriptor contract
   field `0x208` to the descriptor alpha field, and sets tiling to **0**
   (`0x14393a0a3`). This is stronger evidence for a SurfaceAppearance profile than
   choosing enum values because the parser happens to accept them. The alpha
-  field's public-property mapping still needs to be checked before integration.
+  field's public-property mapping was subsequently confirmed below.
 - The named UGC validation callback `0x14408a7a0` calls this same v2 parser at
   `0x14408a955`. It compares the parsed base/emissive content references against
   SurfaceAppearance getters (`0x14408a9da–0x14408aa50`) and requires no layers.
   This establishes an actual SurfaceAppearance descriptor consumer, but does not
   prove rendering of locally generated descriptors or byte-preserving upload.
 
-The implementation path is now a specific unlayered SurfaceAppearance descriptor,
-not a speculative all-usage TexturePack encoder. Remaining integration checks
-are the channel content-element syntax, public alpha-property mapping, local URI
-handling and native property serialization. No process was launched or modified
-to obtain this evidence; no engine acceptance is claimed.
+Follow-up checks used for implementation:
+
+- AlphaMode registration `0x1402ee920` binds the SurfaceAppearance class descriptor
+  and getter `0x1409b4fd0`. The getter reads offset `0x140` of the property
+  subobject. Setter `0x140f6ded0` shows its `0xc8` adjustment to the full instance:
+  `0x140 + 0xc8 = 0x208`, matching the descriptor builder's copied field.
+- Channel writer `0x147315090` emits the channel tag, content string and closing
+  tag. Ordinary URI content is copied at `0x147315327–0x14731533b`; no nested
+  `url` element is inserted. Our writer requires safe ASCII path segments,
+  excluding XML metacharacters rather than implementing arbitrary escaping.
+- Channel parser `0x147314530` reads element text and constructs native content;
+  it is not a packed pixel decoder. The outer closing string is `</roblox>`
+  without a trailing newline. Golden-layout tests follow these inspected bytes.
+- Native RBXM roundtrip tests confirm the pinned serializer retains `TexturePack`
+  ContentId. CLI repeatability, bundle descriptor/map linking and malformed or
+  dangling-reference tests cover the implemented local profile.
+
+No process was launched or modified to obtain this evidence; live engine
+acceptance and publication of the descriptor remain unverified.
 
 ## PC native texture inventory and mip chains
 
