@@ -1,5 +1,9 @@
 # Offline native scene assembly — issue 7
 
+The stated offline assembly requirements are satisfied; see the
+[requirement-by-requirement acceptance audit](scene-terrain-acceptance.md).
+Engine execution and automatic authoring of scene placement are separate claims.
+
 `roblox build scene scene.json --output model.rbxm` constructs a native model
 without Studio. Use `kind: "place"` and `.rbxl` output for a place artifact.
 The root DataModel is implicit. [Example input](../examples/scene.json).

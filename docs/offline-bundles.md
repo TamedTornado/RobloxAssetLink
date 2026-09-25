@@ -139,6 +139,9 @@ Missing bindings remove only the newly owned build output and preserve sources.
 These are linkable build artifacts, not proof of current engine rendering.
 Local URIs need deployment linking (or an explicitly configured local runtime
 content root); the tool does not install anything into Studio. Geometry-derived
-pivots/sizing, source hierarchy automation, rigs/animations, terrain, video and
-deployment acceptance remain unfinished. Both `published` and `engineVerified`
-are false. Incremental caching is not implemented yet.
+pivots/sizing and source hierarchy automation are not implemented; authored scene
+data supplies those values. Rig/animation linking, terrain, video and incremental
+asset caching are implemented for their documented profiles. Engine/deployment
+acceptance remains unverified: both `published` and `engineVerified` are false.
+See the [scene/terrain acceptance audit](scene-terrain-acceptance.md) for the exact
+completed contracts and nonclaims.

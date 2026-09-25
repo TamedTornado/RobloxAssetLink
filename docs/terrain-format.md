@@ -246,10 +246,11 @@ bytes also pass native place assembly alongside newly converted voxels/heightmap
 This is a native lazy-index profile, **not fully precomputed collision geometry**:
 the traced reader can perform normal on-demand mask work. Static evidence does not
 prove live collision/raycast behavior, nor does it prove that omitting PhysicsGrid
-entirely is equivalent. `engineVerified` remains false and the issue remains open.
+entirely is equivalent. `engineVerified` remains false; offline-format acceptance
+is recorded separately in the [acceptance audit](scene-terrain-acceptance.md).
 
-[Issue 10](https://github.com/TamedTornado/RobloxAssetLink/issues/10) tracks the
-remaining native-format coverage and engine-acceptance work.
+[Issue 10](https://github.com/TamedTornado/RobloxAssetLink/issues/10) covers the
+offline terrain conversion contract audited in that report.
 Rust voxel/heightmap encoding and CLI/bundle integration are implemented for the
 documented version-one profile, with metric dimensions, aliases and resource
 policy supplied as validated external configuration.
