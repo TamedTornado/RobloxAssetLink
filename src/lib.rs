@@ -10,6 +10,7 @@ pub mod convert;
 pub mod mesh;
 pub mod scene;
 pub mod scripts;
+pub mod skin;
 mod source_mesh;
 pub mod texture;
 mod vertex_attributes;
