@@ -25,6 +25,29 @@ These are uploaded payload hashes, **not** hashes of remotely downloaded bytes.
 Successful input admission and playback do not establish byte-preserving storage
 or absence of Roblox-side processing.
 
+### Authorized download round trips
+
+Jason subsequently approved adding `legacy-asset:manage` to the existing key.
+The official Open Cloud delivery endpoint then returned HTTP 200. Download URLs
+were restricted to the returned HTTPS Roblox CDN host; the API key was not sent
+to that host. HTTP gzip delivery was decoded before comparing asset bytes.
+
+| Asset | Downloaded payload SHA-256 | Comparison |
+| --- | --- | --- |
+| Static mesh | `4152edf0c8585aa213391a2518d0e69ced384e7fe0071460e37af048494d767b` | Returned mesh v7.00 with COREMESH/DRACO data, not uploaded v2 bytes. |
+| Skinned mesh | `4eec8d0a52cbfa0850b3330fd345c33f37920264cd6180e1cbfb9467c471061a` | Returned mesh v7.00 with COREMESH/DRACO data, not uploaded v4.01 bytes. |
+| PNG | `3e40cf781518b1bccf746f6142620220069f1d652e6ce4eb172ea694b8b132b3` | PNG bytes changed; FFmpeg-decoded RGBA pixels match exactly. |
+| Ogg | `def322002b3e2c1257ccecdac2274942ed5c9a3d5d4c602e9aa4ff791492e2cb` | Bytes and decoded float PCM changed; Vorbis, mono, 22050 Hz and 0.2-second duration preserved. |
+| Animation RBXM | `4bc55e7d0d4413d96751886eca4bb45a61fdd587d55177d365aced6d84473143` | Exact uploaded bytes. |
+| Model RBXM | `092b224a9632fb159e1ad8e6fd23f04076c68960e6de47e9824faa52c58d9778` | Exact uploaded bytes. |
+| TexturePack XML | `69025b5e39d3beb732b171e2daa5b743c7ddeba0e12b0e0a799095780e9005e7` | Exact uploaded descriptor bytes. |
+
+The two decoded RGBA streams share hash
+`f31d06c072e1ac043c3c4275fc9ccaea924a3823b0de6afd75a4c816bbe4005d`.
+These results establish that deployment is **not** universally byte-preserving:
+local builds remain independent, but Roblox can transform delivered assets.
+They do not establish v7 skinning/quantization parity or audio perceptual parity.
+
 The skinned fixture is Rigged Simple, copyright 2017 Cesium, CC BY 4.0, converted
 to Roblox mesh v4.01; see `tests/fixtures/rigged-simple.LICENSE.md`. Roblox filtered
 the supplied attribution description. This disposable test asset is not a release
@@ -137,6 +160,50 @@ documented in Roblox's
 [asset-delivery announcement](https://devforum.roblox.com/t/creator-action-required-new-asset-delivery-api-endpoints-for-community-tools/3574403).
 Do not extract a browser/Studio session credential to get around that boundary.
 
+### Cloud-render comparison, not a pending thumbnail placeholder
+
+Two additional original native RBXM models were uploaded with expectedPrice 0,
+became Active/Approved, and their thumbnail jobs reached `Completed` before the
+images were downloaded and inspected:
+
+| Model | Asset ID | Result |
+| --- | --- | --- |
+| TexturePack only | 91242283009617 | Gray |
+| Explicit cyan color-map control | 75514520994213 | Cyan |
+| Current Content-typed TexturePackContent only | 92949490763673 | Gray; pixel file identical to the first result |
+
+![TexturePack-only cloud render: gray mesh](images/texturepack-only-cloud-render.png)
+
+![Explicit color-map cloud control: cyan mesh](images/color-map-control-cloud-render.png)
+
+The first two model downloads exactly match the submitted RBXM files, with
+hashes `1240c4a071b5295641bc6934f406c330795d936b992144bb5f75131ec63f4f02`
+and `cf47d4c80e989616e2f347adfcc4a205dc3d3f5ca54ce80c03044b028c937e17`.
+Thus their stored models were not silently rewritten to add/remove explicit maps.
+The gray thumbnail SHA-256 is
+`4a44c18c923b2cdddd51202763db492898f67af77a9718179251a83c12af1727`;
+the cyan control is
+`787b1f4ae9a45aa2cfe4d19188f69f1da66d3d49aec7b50a79fe7fda9daf057e`.
+
+The pinned reflection database lacks `SurfaceAppearance.TexturePackContent`;
+the third isolated diagnostic serialized the current Content-typed property
+directly and verified it by native binary roundtrip. It did not fix the gray
+result. No speculative product-schema migration was made on that evidence.
+
+This is an independent cloud-render check, but not an in-game runtime proof.
+Both Studio and cloud previews render the explicit map; neither tested preview
+demonstrates consumption of the stored pack alone. Descriptor admission and
+byte-preserving download are established; pack consumption remains unverified.
+The material pipeline must continue preserving explicit map references.
+
+The zero-price WebM request was retried after delivery access was enabled. It
+still returned HTTP 403 with recourse `IdVerification`, with no operation or
+asset created. The creator dashboard still has no experiences. It offers new
+experience creation through Studio, while the documented publishing API targets
+an existing universe/place. The supervising agent requested a one-time private
+test experience because native desktop controls are unavailable in this session;
+no browser/Studio session credential was extracted as an alternative.
+
 The first mesh probe passed a URI string to PreloadAsync; Roblox interpreted it
 as an image request and returned `AssetDelivery403IncorrectAssetType`. Passing
 the typed MeshPart fixed that test error. This was not a mesh-upload failure.
@@ -166,6 +233,11 @@ pipeline use. It remains subject to Roblox's 60-day inactivity expiry. The key i
 stored outside this repository with owner-only file permissions; neither its
 value nor a browser session credential is part of the fixtures or evidence.
 It has no billing, administration or universe/place-publishing permission.
+The subsequently approved `legacy-asset:manage` system has no creator restriction
+control in the key editor; it is broader than the creator-restricted `assets`
+read/write entries, which were preserved unchanged. The existing key was not
+regenerated, its owner-only storage was retained, and its description was updated
+to state the actual permissions. No other API system was added.
 
 All admission probes declared expectedPrice 0. The failed first image submission
 sent an empty stream because a directory was mistaken for an emitted file; its
