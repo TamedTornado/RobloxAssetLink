@@ -13,6 +13,61 @@ fn config(operation: Operation) -> Config {
 }
 
 #[test]
+fn rgba_dds_preserves_base_pixels_and_emits_semantic_mips_offline() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    let image =
+        RgbaImage::from_raw(3, 1, vec![255, 0, 0, 255, 0, 255, 0, 128, 0, 0, 255, 0]).unwrap();
+    image.save(root.join("source.png")).unwrap();
+    let json = serde_json::json!({"operation":"color","maxWidth":3,"maxHeight":1,"maxDecodedBytes":4096,
+        "output":{"format":"ddsRgba8","mipmaps":true,"maxOutputBytes":144,"mipFilter":"colorStraightAlpha"}});
+    fs::write(root.join("config.json"), json.to_string()).unwrap();
+    let result = Command::new(env!("CARGO_BIN_EXE_roblox"))
+        .env_clear()
+        .args(["convert", "texture"])
+        .arg(root.join("source.png"))
+        .arg("--config")
+        .arg(root.join("config.json"))
+        .arg("--output")
+        .arg(root.join("first"))
+        .output()
+        .unwrap();
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    let config: Config = serde_json::from_value(json.clone()).unwrap();
+    convert(&root.join("source.png"), &root.join("second"), &config).unwrap();
+    let path = root.join("first/color.dds");
+    let bytes = fs::read(&path).unwrap();
+    assert_eq!(bytes, fs::read(root.join("second/color.dds")).unwrap());
+    assert_eq!(&bytes[140..], &[156, 156, 156, 128]);
+    ffmpeg_next::init().unwrap();
+    let mut input = ffmpeg_next::format::input(&path).unwrap();
+    let mut decoder = ffmpeg_next::codec::context::Context::from_parameters(
+        input.stream(0).unwrap().parameters(),
+    )
+    .unwrap()
+    .decoder()
+    .video()
+    .unwrap();
+    let mut packet = ffmpeg_next::Packet::empty();
+    packet.read(&mut input).unwrap();
+    decoder.send_packet(&packet).unwrap();
+    let mut frame = ffmpeg_next::frame::Video::empty();
+    decoder.receive_frame(&mut frame).unwrap();
+    assert_eq!(frame.format(), ffmpeg_next::format::Pixel::RGBA);
+    assert_eq!((frame.width(), frame.height()), (3, 1));
+    assert_eq!(&frame.data(0)[..12], image.as_raw());
+    let mut wrong = json;
+    wrong["output"]["mipFilter"] = serde_json::json!("normal");
+    let policy = serde_json::from_value(wrong).unwrap();
+    assert!(convert(&root.join("source.png"), &root.join("bad"), &policy).is_err());
+    assert!(!root.join("bad").exists());
+}
+
+#[test]
 fn bc4_scalar_blocks_decode_independently_with_bounded_loss_and_full_mips() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();

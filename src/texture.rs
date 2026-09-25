@@ -19,6 +19,12 @@ pub struct Config {
 #[derive(Default, Deserialize)]
 #[serde(tag = "format", rename_all = "camelCase", deny_unknown_fields)]
 pub enum Output {
+    #[serde(rename_all = "camelCase")]
+    DdsRgba8 {
+        mipmaps: bool,
+        max_output_bytes: u64,
+        mip_filter: crate::texture_rgba::Filter,
+    },
     #[default]
     Png,
     #[serde(rename_all = "camelCase")]
@@ -64,6 +70,18 @@ pub struct Texture {
 }
 
 pub fn convert(source: &Path, output: &Path, config: &Config) -> Result<Manifest> {
+    if let Output::DdsRgba8 { mip_filter, .. } = config.output {
+        let supported = match mip_filter {
+            crate::texture_rgba::Filter::Normal => matches!(
+                config.operation,
+                Operation::NormalOpenGl | Operation::NormalDirectX
+            ),
+            _ => matches!(config.operation, Operation::Color),
+        };
+        if !supported {
+            return Err("RGBA DDS mipFilter does not match texture operation".into());
+        }
+    }
     if matches!(config.output, Output::DdsL8 { .. } | Output::DdsBc4 { .. })
         && !matches!(
             config.operation,
@@ -150,6 +168,19 @@ pub fn convert(source: &Path, output: &Path, config: &Config) -> Result<Manifest
     let mut textures = Vec::new();
     for (semantic, color_space, image) in images {
         let (extension, bytes) = match config.output {
+            Output::DdsRgba8 {
+                mipmaps,
+                max_output_bytes,
+                mip_filter,
+            } => (
+                "dds",
+                crate::texture_rgba::encode(
+                    &image.to_rgba8(),
+                    mipmaps,
+                    max_output_bytes,
+                    mip_filter,
+                )?,
+            ),
             Output::DdsBc4 {
                 mipmaps,
                 max_output_bytes,

@@ -24,7 +24,29 @@ or guessed normal-channel swizzle is applied to these scalar maps. Independent
 FFmpeg decoding checks the base level; format-header and exact mip-byte tests
 check the chain, deterministic bytes and configured budget. Material/bundle tests
 verify native local DDS references and atomic failure cleanup. Renderer acceptance
-is still unverified. Color/normal DDS profiles remain unfinished.
+is still unverified.
+
+Color and normal operations can select uncompressed `"format":"ddsRgba8"`,
+with required `mipmaps`, `maxOutputBytes`, and `mipFilter`. Available filters:
+
+- `colorStraightAlpha`: decode RGB from sRGB, area-average in linear space,
+  encode back to sRGB; average alpha independently. Preserves hidden color's
+  contribution, useful for tint/overlay semantics.
+- `colorPremultipliedAlpha`: weight linear RGB by alpha, average, then unpremultiply
+  before storing straight-alpha RGBA. Fully transparent mip texels become black.
+  This prevents transparent pixels' hidden RGB from bleeding into visible edges.
+- `normal`: average tangent-space vectors then normalize and encode back to RGB.
+  Exactly cancelling vectors fail rather than inventing a direction. Normal-map
+  input conversion still handles the explicit DirectX/OpenGL convention first.
+
+Color operations require a color filter; normal operations require `normal`.
+The filter is required even with mipmaps disabled so enabling them cannot silently
+pick a policy. Base pixels are retained exactly; filtering/quantization applies
+only to lower levels. The DDS uses ordinary RGBA8 masks and no proprietary swizzle.
+Its legacy header does not carry an sRGB tag; interpretation remains the material
+map's semantic, as recorded in the texture manifest. Independent FFmpeg decoding
+checks base RGBA/alpha; known-value tests cover gamma, alpha policy and normal
+renormalization. Color/normal block compression and TexturePack remain unfinished.
 
 The same scalar operations also accept `"format":"ddsBc4"`, with the same
 required `mipmaps` and `maxOutputBytes` fields. This emits unsigned BC4 blocks
@@ -206,8 +228,8 @@ every device supports the same payload.
 
 **Implementation consequence:** PNG normalization is not yet the whole offline
 texture pipeline. The scalar DDS/mipmap profile above starts the native-output
-implementation; color/normal profiles still need semantic filtering
-and independent decoding tests. Do not silently replace PNGs with a
+implementation alongside the uncompressed RGBA profile; compressed color/normal
+profiles remain unfinished. Do not silently replace PNGs with a
 guessed platform cache. Keep TexturePack material descriptors separate from pixel
 encoding. Further evidence is needed for the marked normal encoding and the
 renderer/TexturePack relationship. Issue 5 remains open.
