@@ -1,0 +1,140 @@
+//! Offline texture normalization and PBR channel conversion.
+use crate::Result;
+use image::{DynamicImage, GrayImage, ImageDecoder, ImageFormat, ImageReader, Luma};
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
+use std::{fs, io::Cursor, path::Path};
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct Config {
+    pub operation: Operation,
+    pub max_width: u32,
+    pub max_height: u32,
+    pub max_decoded_bytes: u64,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Operation {
+    Color,
+    NormalOpenGl,
+    NormalDirectX,
+    GltfMetallicRoughness,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Manifest {
+    pub format: &'static str,
+    pub version: u32,
+    pub width: u32,
+    pub height: u32,
+    pub textures: Vec<Texture>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Texture {
+    pub file: String,
+    pub sha256: String,
+    pub semantic: &'static str,
+    pub color_space: &'static str,
+}
+
+pub fn convert(source: &Path, output: &Path, config: &Config) -> Result<Manifest> {
+    if config.max_width == 0 || config.max_height == 0 || config.max_decoded_bytes == 0 {
+        return Err("texture decode limits must be positive".into());
+    }
+    let mut reader = ImageReader::open(source)?.with_guessed_format()?;
+    let mut limits = image::Limits::default();
+    limits.max_image_width = Some(config.max_width);
+    limits.max_image_height = Some(config.max_height);
+    limits.max_alloc = Some(config.max_decoded_bytes);
+    reader.limits(limits);
+    let mut decoder = reader.into_decoder()?;
+    if decoder.icc_profile()?.is_some() {
+        return Err("ICC-managed texture input requires an explicit color-profile conversion, not implemented yet".into());
+    }
+    if decoder.orientation()? != image::metadata::Orientation::NoTransforms {
+        return Err(
+            "texture input has EXIF orientation; bake orientation before conversion".into(),
+        );
+    }
+    let decoded = DynamicImage::from_decoder(decoder)?;
+    if !matches!(
+        decoded.color(),
+        image::ColorType::L8
+            | image::ColorType::La8
+            | image::ColorType::Rgb8
+            | image::ColorType::Rgba8
+    ) {
+        return Err("this texture profile requires 8-bit channels; explicit HDR/16-bit conversion is not implemented".into());
+    }
+    let (width, height) = (decoded.width(), decoded.height());
+    let images = match config.operation {
+        Operation::Color => vec![(
+            "color",
+            "sRGB",
+            DynamicImage::ImageRgba8(decoded.to_rgba8()),
+        )],
+        Operation::NormalOpenGl | Operation::NormalDirectX => {
+            let mut pixels = decoded.to_rgb8();
+            if matches!(config.operation, Operation::NormalDirectX) {
+                for pixel in pixels.pixels_mut() {
+                    pixel[1] = 255 - pixel[1];
+                }
+            }
+            vec![("normal", "linear", DynamicImage::ImageRgb8(pixels))]
+        }
+        Operation::GltfMetallicRoughness => {
+            let pixels = decoded.to_rgb8();
+            let roughness =
+                GrayImage::from_fn(width, height, |x, y| Luma([pixels.get_pixel(x, y)[1]]));
+            let metalness =
+                GrayImage::from_fn(width, height, |x, y| Luma([pixels.get_pixel(x, y)[2]]));
+            vec![
+                ("roughness", "linear", DynamicImage::ImageLuma8(roughness)),
+                ("metalness", "linear", DynamicImage::ImageLuma8(metalness)),
+            ]
+        }
+    };
+    let mut files = Vec::new();
+    let mut textures = Vec::new();
+    for (semantic, color_space, image) in images {
+        let mut bytes = Cursor::new(Vec::new());
+        image.write_to(&mut bytes, ImageFormat::Png)?;
+        let bytes = bytes.into_inner();
+        let file = format!("{semantic}.png");
+        textures.push(Texture {
+            file: file.clone(),
+            sha256: format!("{:x}", Sha256::digest(&bytes)),
+            semantic,
+            color_space,
+        });
+        files.push((file, bytes));
+    }
+    let manifest = Manifest {
+        format: "roblox-texture-bundle",
+        version: 1,
+        width,
+        height,
+        textures,
+    };
+    let manifest_bytes = serde_json::to_vec_pretty(&manifest)?;
+    fs::create_dir(output)?;
+    let result = (|| -> Result<()> {
+        for (file, bytes) in files {
+            fs::write(output.join(file), bytes)?;
+        }
+        fs::write(output.join("manifest.json"), manifest_bytes)?;
+        Ok(())
+    })();
+    if let Err(error) = &result {
+        fs::remove_dir_all(output).map_err(|cleanup| {
+            format!("texture conversion failed: {error}; cleanup failed: {cleanup}")
+        })?;
+    }
+    result?;
+    Ok(manifest)
+}

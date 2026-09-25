@@ -22,6 +22,10 @@ collision cooking is available with `--collision-config examples/collision-hull.
 see [collision format evidence](docs/collision-format.md). Neither output is yet
 claimed as a complete game or engine/deployment-verified asset.
 
+`roblox convert texture` also performs local PNG normalization, normal-map
+convention conversion and PBR channel splitting; see
+[texture conversion](docs/texture-conversion.md) for its explicit configuration.
+
 ## Executables and current scope
 
 - `roblox`: short-lived commands with JSON results, JSON errors on stderr, and
