@@ -1,5 +1,65 @@
 # Preconverted asset cloud acceptance — September 25, 2026
 
+## Current publishing outcome
+
+Jason created the private **RobloxToolchain Acceptance** experience through
+Studio, universe `10767994924`, start place `99388199272385`. He explicitly
+approved `universe-places:write` on the existing key restricted to that experience.
+The saved key retained creator-restricted asset read/write and the previously
+approved delivery scope; no other experience, billing or account-administration
+permission was added. The no-fixed-expiration and owner-only key storage remained
+unchanged.
+
+Publishing the already-built native `texture-comparison.rbxl` through
+`POST /universes/v1/10767994924/places/99388199272385/versions?versionType=Published`
+returned HTTP 200 and `versionNumber: 4`. Downloading **that exact version** through
+authenticated asset delivery produced the same SHA-256 as the local input:
+`49d107ef12d8ab0aa3db4c273b157387300a9db34a23b61f31b1cda6f0c83366`.
+Native decoding confirmed that the original pack ID and explicit map references
+were retained. This proves the prebuilt-place publication route, not merely
+model upload or a saved draft. The experience remains private.
+
+The downloaded version was opened in an isolated Studio session, with temporary
+test scripts added **only in memory**, and executed through
+`StudioTestService:ExecutePlayModeAsync({test="published-materials"})`. The server
+reported `isRunning: true`, `isServer: true`, successful typed mesh preloads for
+all three controls and no failures; EndTest returned that result and the isolated
+session exited. This is local Studio play-mode acceptance of the published bytes,
+not a remote Roblox game-server session or proof of texture pixels. The corrected
+probe rejects empty preload outcomes and ends on exceptions or its explicit
+60-second fixture deadline. An earlier diagnostic incorrectly read the
+plugin-protected ColorMap property from a server Script; it was corrected rather
+than granted elevated capabilities.
+
+An additional client-side capture test entered actual play mode and obtained
+`rbxtemp://191` from the normal CaptureService API. Pixel inspection failed:
+`CreateEditableImageAsync` explicitly refuses temporary texture IDs. The test
+reported failure and ended; no capture-gallery access or security bypass was used.
+The previous Studio/cloud-preview images remain the available visual evidence.
+
+### Independent Studio-generated TexturePack reference
+
+Before the CLI publication, the place that Jason published through Studio was
+downloaded and inspected. Studio had cleared the pack-only control's pack
+reference and assigned generated pack `79124565054263` to both mapped controls.
+Downloading that generated pack yielded exactly our color descriptor's XML
+content, except that the manually authored upload probe had a trailing newline.
+Our actual encoder already omits that newline, matching Studio's writer.
+
+The native payload has SHA-256
+`4d944172307e81b5eae1cd515afec105220b59a62f28787434167b868d84bc57` and is retained
+under `tests/fixtures/texturepack/`, with provenance. The new offline golden test
+substitutes only the remote image reference with a local URI and compares the
+encoder's bytes exactly. Full Rust tests, Clippy and formatting passed afterward.
+This supplies independent descriptor-format evidence; it does not turn the
+pack-only preview or unavailable pixel-read test into a pass.
+
+The historical failures below describe earlier attempts. In particular, the
+generic Assets API's Place failure is **not** a failure of the now-tested,
+dedicated existing-place publishing API. Video remains blocked by the account's
+ID-verification requirement, and direct DDS image-upload admission remains
+unsupported in the tested route. No paid upload was attempted.
+
 ## Completed live tests
 
 Uploaded already-converted bytes using the Assets API, then polled each operation

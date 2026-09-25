@@ -85,6 +85,17 @@ mod tests {
     use super::*;
 
     #[test]
+    fn local_descriptor_layout_matches_independently_published_studio_pack() {
+        let native = include_str!("../tests/fixtures/texturepack/studio-color.xml");
+        let local_uri = "rbxasset://kit/c.png";
+        let expected = native.replace("105842817222628", local_uri);
+        let maps = BTreeMap::from([("color".into(), local_uri.into())]);
+
+        assert!(!native.ends_with('\n'));
+        assert_eq!(encode(0, &maps).unwrap(), expected.as_bytes());
+    }
+
+    #[test]
     fn descriptor_matches_inspected_native_writer_layout() {
         let maps = BTreeMap::from([
             ("roughness".into(), "rbxasset://kit/r.dds".into()),
