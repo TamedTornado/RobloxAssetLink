@@ -32,6 +32,9 @@ compiler gate before serialization. See [scene assembly](docs/scene-assembly.md)
 and [Luau compilation](docs/luau-compilation.md); these are not yet the complete
 asset-linked game build or deployment pipeline.
 
+`roblox convert audio` performs in-process Ogg Vorbis conversion; see
+[media conversion](docs/media-conversion.md) for its current profile and tests.
+
 ## Executables and current scope
 
 - `roblox`: short-lived commands with JSON results, JSON errors on stderr, and

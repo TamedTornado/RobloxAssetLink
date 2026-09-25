@@ -2,6 +2,7 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::{fs, path::Path};
 
+pub mod audio;
 pub mod catalog;
 pub mod collision;
 mod collision_format;

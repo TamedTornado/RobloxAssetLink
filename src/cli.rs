@@ -60,6 +60,14 @@ enum Build {
 
 #[derive(Subcommand)]
 enum Convert {
+    /// Decode audio and encode Ogg Vorbis locally, preserving sample rate/channels.
+    Audio {
+        source: PathBuf,
+        #[arg(long)]
+        config: PathBuf,
+        #[arg(long)]
+        output: PathBuf,
+    },
     /// Normalize images and PBR maps locally to PNG artifacts.
     Texture {
         source: PathBuf,
@@ -121,6 +129,20 @@ enum Assets {
 }
 
 fn execute(cli: Cli) -> Result<Value> {
+    if let Command::Convert {
+        command:
+            Convert::Audio {
+                source,
+                config,
+                output,
+            },
+    } = &cli.command
+    {
+        let config = serde_json::from_slice(&std::fs::read(config)?)?;
+        return Ok(
+            json!({"ok":true,"scope":"offlineConversion","result":roblox_asset_link::audio::convert(source,output,&config)?}),
+        );
+    }
     if let Command::Compile {
         source,
         config,
@@ -189,7 +211,7 @@ fn execute(cli: Cli) -> Result<Value> {
             "commandGroups":["assets","convert","build","compile"],"assetOperations":["init","add","edit","remove","list","inspect","validate","config"],
             "localLuauCompilation":true,
             "offlineSceneSerialization":true,
-            "offlineConversion":["static-gltf-to-mesh-v2","static-fbx-to-mesh-v2","static-obj-to-mesh-v2","textures-to-png","collision-to-csgphs-v5"],"offlineGameBuild":false,
+            "offlineConversion":["static-gltf-to-mesh-v2","static-fbx-to-mesh-v2","static-obj-to-mesh-v2","textures-to-png","collision-to-csgphs-v5","audio-to-ogg-vorbis"],"offlineGameBuild":false,
             "serverExecutable":"roblox-server","requiresStudioForCatalog":false,
             "persistentStudioImport":false,"studioCommandExecution":false
         }}));
