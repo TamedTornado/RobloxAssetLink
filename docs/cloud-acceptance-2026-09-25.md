@@ -1,5 +1,11 @@
 # Preconverted asset cloud acceptance — September 25, 2026
 
+Current scope correction: video uploading is not required; Jason deferred ID
+verification. Historical video failures below are evidence, not an active blocker.
+The DDS import/upload investigation now traces the executable's actual image
+classification and rejection path and tests an unchanged Roblox-shipped DDS;
+see [the focused investigation](dds-import-upload-investigation.md).
+
 ## Current publishing outcome
 
 Jason created the private **RobloxToolchain Acceptance** experience through
