@@ -1,0 +1,8 @@
+{
+  "kind":"place",
+  "roots":[{"id":"workspace","class":"Workspace","name":"Workspace","properties":{},"references":{},"children":[
+    {"id":"hull","class":"MeshPart","name":"Hull","properties":{"Anchored":{"Bool":true},"Size":{"Vector3":[4,4,4]},"InitialSize":{"Vector3":[4,4,4]}},"references":{},"children":[],"assets":{"MeshContent":{"asset":"engine-acceptance-hull","file":"node-1-primitive-0.mesh"},"PhysicalConfigData":{"asset":"engine-acceptance-hull","file":"node-1-primitive-0.mesh.physics"}}},
+    {"id":"box","class":"MeshPart","name":"Box","properties":{"Anchored":{"Bool":true},"Size":{"Vector3":[4,4,4]},"InitialSize":{"Vector3":[4,4,4]}},"references":{},"children":[],"assets":{"MeshContent":{"asset":"engine-acceptance-box","file":"node-1-primitive-0.mesh"},"PhysicalConfigData":{"asset":"engine-acceptance-box","file":"node-1-primitive-0.mesh.physics"}}},
+    {"id":"decomposition","class":"MeshPart","name":"Decomposition","properties":{"Anchored":{"Bool":true},"Size":{"Vector3":[12,4,4]},"InitialSize":{"Vector3":[12,4,4]}},"references":{},"children":[],"assets":{"MeshContent":{"asset":"engine-acceptance-decomposition","file":"node-1-primitive-0.mesh"},"PhysicalConfigData":{"asset":"engine-acceptance-decomposition","file":"node-1-primitive-0.mesh.physics"}}}
+  ]}]
+}

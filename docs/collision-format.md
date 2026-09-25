@@ -17,21 +17,27 @@ The exact-hull reconstruction can exceed VHACD's split budget. The converter
 checks the final count and fails explicitly if it exceeds the requested budget;
 it does not silently merge hulls, drop pieces or increase the configured limit.
 
-## Acceptance is not yet complete
+## Native acceptance
 
-The installed Studio executable contains strings for v8 collision migration,
-Zstd compression, voxel decomposition and HACD. Those are evidence of engine
-implementation paths, NOT proof that our v5 payload can be assigned to a current
-MeshPart or deployed. The current payload is a format-conformance milestone.
-Each manifest records `engineVerified: false`; issue 2 remains open until current
-native consumption, physical behavior and necessary mass/inertia handling are
-established. v8 encoding may be required; do not paper over that with a cloud cook.
+On September 25, 2026, Studio 0.740.19.7400931 under Wine loaded the locally
+encoded v5 payloads and passed the native assertions in
+`tests/fixtures/engine-collision/validate.luau`. The fixture checks box, tetrahedral
+hull and disconnected concave decomposition with raycasts, empty-space controls,
+mass, center of mass and all three inertia-tensor columns, both at identity and
+under a translated/rotated placement. See [the reproducible acceptance procedure](engine-collision-acceptance.md).
+
+No source import or engine collision cooking was requested. In particular, box
+and hull use identical mesh bytes but produce different physical results. v8 is
+not required for these tested MeshParts. This is evidence for this engine version
+and fixture, not a promise about all future Roblox versions or cloud admission.
+Ordinary conversion manifests still record `engineVerified: false`: a historical
+fixture result must not attest an arbitrary newly converted asset.
 
 The CLI emits `.physics` sidecars with hashes and hull counts. Native scene/bundle
 assembly now embeds them into `PhysicalConfigData` using the receiving property's
 reflection type; integration tests deserialize the place and compare the exact
-embedded bytes. This repairs the previous unwired state, but does not demonstrate
-that the live physics engine accepts or uses those bytes correctly.
+embedded bytes. The separate native acceptance run additionally proves consumption
+of the embedded payloads by the current physics engine.
 
 ## Installed executable inspection (2026-09-25)
 
@@ -52,6 +58,5 @@ Static inspection only; no patching, injection or Studio process was required.
 - Reflection registration references `PhysicalConfigData` at `0x14016b6f8`,
   and `PhysicsData` at `0x1401823e1` and `0x14018b1e1`.
 
-Inference: v5 is still a meaningful input candidate in this installed build;
-we have not proved that a MeshPart instantiated from our generated place will
-use it correctly. That remains an engine acceptance test, not a static claim.
+These static observations motivated the v5 acceptance experiment. The subsequent
+native run above supplies the runtime evidence that static inspection alone lacked.

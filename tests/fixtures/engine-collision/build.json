@@ -1,0 +1,8 @@
+{
+  "assets": [
+    {"id":"engine-acceptance-hull","conversion":{"kind":"mesh","source":"tetra.obj","config":{"metresPerStud":1,"objMetresPerUnit":1},"collision":{"mode":"hull"}}},
+    {"id":"engine-acceptance-box","conversion":{"kind":"mesh","source":"tetra.obj","config":{"metresPerStud":1,"objMetresPerUnit":1},"collision":{"mode":"box"}}},
+    {"id":"engine-acceptance-decomposition","conversion":{"kind":"mesh","source":"disconnected.obj","config":{"metresPerStud":1,"objMetresPerUnit":1},"collision":{"mode":"decomposition","concavity":0.01,"alpha":0.05,"beta":0.05,"resolution":32,"planeDownsampling":1,"convexHullDownsampling":1,"maxConvexHulls":64,"detectCavities":false,"convexHullApproximation":false}}}
+  ],
+  "scenes":[{"id":"collision-acceptance","source":"scene.json"}]
+}

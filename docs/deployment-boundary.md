@@ -41,13 +41,13 @@ Credentials and network calls must remain outside CI build tests. Acceptance
 must distinguish input admission, completed upload/moderation and actual runtime
 use; none should be inferred from the others.
 
-A user/group and disposable universe/place have not been selected. Jason has been
-asked for that destination; issue 9 explicitly requires selection before actual
-publication. Selecting one will permit scoped acceptance experiments, not prove
-that unsupported native formats have a working endpoint. Authentication should
-use the selected destination's authorized mechanism; do not scavenge unrelated
-credentials or infer an account from an existing game repository.
+Jason subsequently authorized creation of a new disposable test experience and
+scoped uploads/publication, and allowed Studio under Wine for acceptance. Do not
+ask him to select an existing game: create a separate test destination without
+touching LayerOne or unrelated projects. That authorization does not prove that
+unsupported native formats have a working endpoint. Authentication must use the
+test destination's authorized mechanism, not unrelated credentials.
 
-The missing destination blocks live deployment proof, but not local implementation
-of mapping/relinking or API-contract tests. Those remain work to do. Issue 9 stays
+The destination still needs to be created; local implementation of mapping,
+relinking and API-contract tests also remains work to do. Issue 9 stays
 open; the overall goal is not complete or marked blocked by this audit.
