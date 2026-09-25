@@ -27,9 +27,11 @@ Each manifest records `engineVerified: false`; issue 2 remains open until curren
 native consumption, physical behavior and necessary mass/inertia handling are
 established. v8 encoding may be required; do not paper over that with a cloud cook.
 
-The CLI emits `.physics` sidecars with hashes and hull counts. This does not yet
-wire them into native place instances. Scene assembly and collision property
-binding belong to the corresponding place/model work.
+The CLI emits `.physics` sidecars with hashes and hull counts. Native scene/bundle
+assembly now embeds them into `PhysicalConfigData` using the receiving property's
+reflection type; integration tests deserialize the place and compare the exact
+embedded bytes. This repairs the previous unwired state, but does not demonstrate
+that the live physics engine accepts or uses those bytes correctly.
 
 ## Installed executable inspection (2026-09-25)
 
