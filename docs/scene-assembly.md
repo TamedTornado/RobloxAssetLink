@@ -13,7 +13,11 @@ by arbitrary property values. Output creation is atomic and does not overwrite.
 
 `scriptSource` may name a UTF-8 source file under the scene document directory for
 Script, LocalScript or ModuleScript. Absolute paths and symlink/directory escapes
-fail. This packs source text; it does not yet type-check, compile or run Luau.
+fail. A scene containing file or inline script source requires a `scriptCompiler`
+object with the four levels shown in [compiler configuration](../examples/compiler.json).
+Each source is compiled locally as a validation gate, then the original text is
+packed into the native Source property. Source is never executed. This is syntax
+and compilation validation, not whole-project type checking or runtime testing.
 
 This uses the MIT rbx-dom/rbx_binary libraries, not a Rojo subprocess. Repeated
 builds are tested for identical bytes, followed by native deserialization checks

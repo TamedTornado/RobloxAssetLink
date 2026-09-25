@@ -18,6 +18,7 @@ use std::{
 pub struct Specification {
     pub kind: Kind,
     pub roots: Vec<Node>,
+    pub script_compiler: Option<crate::scripts::Config>,
 }
 
 #[derive(Deserialize)]
@@ -55,6 +56,7 @@ fn insert(
     node: &Node,
     root: &Path,
     ids: &mut HashMap<String, Ref>,
+    compiler: Option<&crate::scripts::Config>,
 ) -> Result<()> {
     if node.id.is_empty() || node.class.is_empty() {
         return Err("scene node id and class must be nonempty".into());
@@ -99,6 +101,12 @@ fn insert(
             )
             .into());
         }
+        if name == "Source" {
+            let Variant::String(source) = value else {
+                return Err("script Source must be a string".into());
+            };
+            validate_script(source, node, compiler)?;
+        }
         builder = builder.with_property(name.as_str(), value.clone());
     }
     if let Some(source) = &node.script_source {
@@ -115,13 +123,33 @@ fn insert(
         if source.is_absolute() || !path.starts_with(root) {
             return Err("scriptSource must remain under the scene source directory".into());
         }
-        builder = builder.with_property("Source", fs::read_to_string(path)?);
+        let source = fs::read_to_string(path)?;
+        validate_script(&source, node, compiler)?;
+        builder = builder.with_property("Source", source);
     }
     let reference = dom.insert(parent, builder);
     ids.insert(node.id.clone(), reference);
     for child in &node.children {
-        insert(dom, reference, child, root, ids)?;
+        insert(dom, reference, child, root, ids, compiler)?;
     }
+    Ok(())
+}
+
+fn validate_script(
+    source: &str,
+    node: &Node,
+    compiler: Option<&crate::scripts::Config>,
+) -> Result<()> {
+    if !matches!(
+        node.class.as_str(),
+        "Script" | "LocalScript" | "ModuleScript"
+    ) {
+        return Err("Source requires a supported script class".into());
+    }
+    let compiler = compiler
+        .ok_or("scene containing script source requires explicit scriptCompiler configuration")?;
+    crate::scripts::compile(source, compiler)
+        .map_err(|e| format!("script {} failed compilation: {e}", node.id))?;
     Ok(())
 }
 
@@ -163,7 +191,14 @@ pub fn build(source: &Path, output: &Path) -> Result<BuildResult> {
     let mut ids = HashMap::new();
     let parent = dom.root_ref();
     for node in &specification.roots {
-        insert(&mut dom, parent, node, root, &mut ids)?;
+        insert(
+            &mut dom,
+            parent,
+            node,
+            root,
+            &mut ids,
+            specification.script_compiler.as_ref(),
+        )?;
     }
     for node in &specification.roots {
         link(&mut dom, node, &ids)?;

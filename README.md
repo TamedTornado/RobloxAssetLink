@@ -26,6 +26,12 @@ claimed as a complete game or engine/deployment-verified asset.
 convention conversion and PBR channel splitting; see
 [texture conversion](docs/texture-conversion.md) for its explicit configuration.
 
+`roblox build scene` assembles native model/place files, and `roblox compile`
+compiles Luau without execution. Scene script sources must pass that local
+compiler gate before serialization. See [scene assembly](docs/scene-assembly.md)
+and [Luau compilation](docs/luau-compilation.md); these are not yet the complete
+asset-linked game build or deployment pipeline.
+
 ## Executables and current scope
 
 - `roblox`: short-lived commands with JSON results, JSON errors on stderr, and

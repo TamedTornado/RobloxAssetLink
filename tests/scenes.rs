@@ -3,7 +3,7 @@ use serde_json::json;
 use std::fs;
 
 fn specification() -> serde_json::Value {
-    json!({"kind":"model","roots":[{
+    json!({"kind":"model","scriptCompiler":{"optimizationLevel":1,"debugLevel":1,"typeInfoLevel":0,"coverageLevel":0},"roots":[{
         "id":"model","class":"Model","name":"Kit","properties":{},"references":{"PrimaryPart":"part"},
         "children":[
             {"id":"part","class":"Part","name":"Block","properties":{"Anchored":{"Bool":true}},"references":{},"children":[]},
@@ -145,4 +145,41 @@ fn scene_build_ignores_ambient_reflection_database_overrides() {
         String::from_utf8_lossy(&result.stderr)
     );
     assert_eq!(fs::read(baseline).unwrap(), fs::read(output).unwrap());
+}
+
+#[test]
+fn scene_script_compilation_is_mandatory_for_inline_and_file_sources() {
+    let temporary = tempfile::tempdir().unwrap();
+    let source = temporary.path().join("scene.json");
+    let output = temporary.path().join("model.rbxm");
+    fs::write(temporary.path().join("logic.luau"), "local = invalid").unwrap();
+    fs::write(&source, serde_json::to_vec(&specification()).unwrap()).unwrap();
+    assert!(
+        build(&source, &output)
+            .err()
+            .unwrap()
+            .to_string()
+            .contains("failed compilation")
+    );
+    assert!(!output.exists());
+    let mut inline = specification();
+    inline["roots"][0]["children"][1]
+        .as_object_mut()
+        .unwrap()
+        .remove("scriptSource");
+    inline["roots"][0]["children"][1]["properties"]["Source"] = json!({"String":"local = invalid"});
+    fs::write(&source, serde_json::to_vec(&inline).unwrap()).unwrap();
+    assert!(build(&source, &output).is_err());
+    assert!(!output.exists());
+    inline["roots"][0]["children"][1]["properties"]["Source"] = json!({"String":"return 42"});
+    inline.as_object_mut().unwrap().remove("scriptCompiler");
+    fs::write(&source, serde_json::to_vec(&inline).unwrap()).unwrap();
+    assert!(
+        build(&source, &output)
+            .err()
+            .unwrap()
+            .to_string()
+            .contains("scriptCompiler")
+    );
+    assert!(!output.exists());
 }

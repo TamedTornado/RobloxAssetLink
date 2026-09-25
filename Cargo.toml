@@ -31,6 +31,7 @@ image = { version = "=0.25.9", default-features = false, features = ["png", "jpe
 rbx_binary = "=3.0.0"
 rbx_dom_weak = "=4.2.0"
 rbx_reflection_database = { version = "=3.0.0", features = ["debug_always_use_bundled"] }
+mlua = { version = "=0.11.4", features = ["luau", "vendored", "error-send"] }
 
 [dev-dependencies]
 rbx_mesh = { version = "=0.7.0", default-features = false, features = ["mesh", "union-physics"] }
