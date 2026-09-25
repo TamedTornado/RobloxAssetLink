@@ -39,6 +39,10 @@ fn bundle_converts_and_links_native_assets_without_remote_ids() {
     let manifest = build(&source, &output).unwrap();
     assert!(!manifest.published);
     assert!(!manifest.engine_verified);
+    let inputs: serde_json::Value =
+        serde_json::from_slice(&fs::read(output.join("build-inputs.json")).unwrap()).unwrap();
+    assert!(inputs["assets"]["paint"]["color.png"].is_string());
+    assert!(inputs["scenes"]["test-model"]["scene.json"].is_string());
     assert_eq!(manifest.files.len(), 7);
     assert_eq!(manifest.scenes.len(), 1);
     let bytes = fs::read(output.join(&manifest.scenes[0].path)).unwrap();

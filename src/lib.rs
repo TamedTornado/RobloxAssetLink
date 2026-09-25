@@ -8,6 +8,7 @@ pub mod animation_gltf;
 mod animation_rebase;
 pub mod audio;
 pub mod bundle;
+mod bundle_inputs;
 pub mod bundle_verify;
 pub mod catalog;
 pub mod collision;

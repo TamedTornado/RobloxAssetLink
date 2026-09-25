@@ -18,6 +18,21 @@ the result always reports `engineVerified: false`. Incremental cache reuse is
 separate unfinished work and must additionally validate source dependencies,
 conversion metadata and tool/configuration fingerprints.
 
+Each build now records `build-inputs.json`, a separate versioned source inventory
+with the plan hash and per-asset/per-scene file hashes. It includes external glTF
+buffers, selected material images (including images stored in external buffers),
+authored material maps, muxed media inputs and nested scene scripts. Embedded
+resources are covered by their containing source file. Unrelated files are not
+invented dependencies. URI resolution shares the converter's local-only path
+validation; missing or escaping dependencies fail before output creation.
+
+The builder compares inventories before and after conversion and removes its
+owned output on a detected source change. This is change detection, not a locked
+filesystem snapshot; build from a stable checkout. The inventory is not a runtime
+artifact and does not by itself enable cache reuse. Compiler/configuration and
+bound-skin dependency keys, complete cached-output verification and atomic cache
+publication still need to be connected before incremental rebuilds are complete.
+
 `roblox build bundle build.json --output NEW_DIRECTORY` converts declared assets
 and assembles native scenes in one local invocation. The plan contains `assets`
 and `scenes` lists, each with explicit logical ids. Asset conversions select

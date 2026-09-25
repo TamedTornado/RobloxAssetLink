@@ -363,6 +363,10 @@ fn read_buffer(root: &Path, uri: &str) -> Result<Vec<u8>> {
 }
 
 pub(crate) fn read_local_uri(root: &Path, uri: &str) -> Result<Vec<u8>> {
+    Ok(fs::read(local_uri_path(root, uri)?)?)
+}
+
+pub(crate) fn local_uri_path(root: &Path, uri: &str) -> Result<std::path::PathBuf> {
     let path = percent_encoding::percent_decode_str(uri).decode_utf8()?;
     if path.contains([':', '\\', '?', '#', '\0']) || Path::new(path.as_ref()).is_absolute() {
         return Err("buffer URI must be a local relative path; network access is forbidden".into());
@@ -371,7 +375,7 @@ pub(crate) fn read_local_uri(root: &Path, uri: &str) -> Result<Vec<u8>> {
     if !path.starts_with(root) {
         return Err("buffer path escapes the source directory".into());
     }
-    Ok(fs::read(path)?)
+    Ok(path)
 }
 
 pub fn convert(source: &Path, output: &Path, config: &Config) -> Result<Manifest> {

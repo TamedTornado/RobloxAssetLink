@@ -363,6 +363,7 @@ pub fn build(source: &Path, output: &Path) -> Result<Manifest> {
         return Err("empty build plan".into());
     }
     let ordered = ordered_assets(&plan)?;
+    let inputs = crate::bundle_inputs::collect(&source, &plan)?;
     fs::create_dir(output)?;
     let result = (|| -> Result<Manifest> {
         fs::create_dir(output.join("assets"))?;
@@ -442,6 +443,13 @@ pub fn build(source: &Path, output: &Path) -> Result<Manifest> {
             published: false,
             engine_verified: false,
         };
+        if crate::bundle_inputs::collect(&source, &plan)? != inputs {
+            return Err("bundle source inputs changed during conversion".into());
+        }
+        fs::write(
+            output.join("build-inputs.json"),
+            serde_json::to_vec_pretty(&inputs)?,
+        )?;
         fs::write(
             output.join("manifest.json"),
             serde_json::to_vec_pretty(&manifest)?,
