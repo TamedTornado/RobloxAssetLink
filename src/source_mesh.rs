@@ -59,9 +59,8 @@ pub(crate) fn read(path: &Path, bytes: &[u8], config: &Config) -> Result<Vec<Out
             continue;
         };
         if !source.all_deformers.is_empty()
-            || source.vertex_color.exists
-            || source.vertex_tangent.exists
             || source.uv_sets.len() > 1
+            || source.color_sets.len() > 1
             || source.num_line_faces != 0
             || source.num_point_faces != 0
             || source.num_empty_faces != 0
@@ -103,14 +102,53 @@ pub(crate) fn read(path: &Path, bytes: &[u8], config: &Config) -> Result<Vec<Out
                     );
                     let length =
                         (normal.x * normal.x + normal.y * normal.y + normal.z * normal.z).sqrt();
+                    let normal = [normal.x, normal.y, normal.z].map(|v| (v / length) as f32);
+                    let color = if source.vertex_color.exists {
+                        let color = source.vertex_color[*index as usize];
+                        crate::vertex_attributes::color(
+                            [color.x, color.y, color.z, color.w].map(|v| v as f32),
+                        )?
+                    } else {
+                        [255; 4]
+                    };
+                    let tangent = if source.vertex_tangent.exists {
+                        if !source.vertex_bitangent.exists {
+                            return Err(
+                                "tangent data requires source bitangents to preserve handedness"
+                                    .into(),
+                            );
+                        }
+                        let t = source.vertex_tangent[*index as usize];
+                        let b = source.vertex_bitangent[*index as usize];
+                        let n = source.vertex_normal[*index as usize];
+                        let handedness = crate::dot(
+                            crate::cross(
+                                [n.x as f32, n.y as f32, n.z as f32],
+                                [t.x as f32, t.y as f32, t.z as f32],
+                            ),
+                            [b.x as f32, b.y as f32, b.z as f32],
+                        )
+                        .signum();
+                        let t = ufbx::transform_direction(transform, t);
+                        // FBX/OBJ UV V is flipped at this boundary, reversing
+                        // the bitangent sign in addition to any reflected transform.
+                        crate::vertex_attributes::tangent(
+                            crate::IDENTITY,
+                            normal,
+                            [t.x as f32, t.y as f32, t.z as f32, -handedness],
+                            determinant < 0.,
+                        )?
+                    } else {
+                        [0; 4]
+                    };
                     let uv = source.vertex_uv[*index as usize];
                     geometry.vertices.push(mesh::Vertex {
                         position: [position.x, position.y, position.z]
                             .map(|v| (v / f64::from(config.metres_per_stud)) as f32),
-                        normal: [normal.x, normal.y, normal.z].map(|v| (v / length) as f32),
+                        normal,
                         uv: [uv.x as f32, (1. - uv.y) as f32],
-                        tangent: [0; 4],
-                        color: [255; 4],
+                        tangent,
+                        color,
                     });
                 }
                 geometry.triangles.push(if determinant < 0. {

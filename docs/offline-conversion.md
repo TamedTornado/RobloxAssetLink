@@ -26,9 +26,10 @@ transpose normals, fixes reflected winding, retains UV0 and records material
 factors in the manifest. This is geometry conversion, not finished scene assembly:
 pivot/hierarchy reconstruction belongs to the place/model issue. Textures,
 skinning, animation, morphs, extra vertex channels and extensions currently fail
-explicitly. The GLB/glTF adapter preserves COLOR_0 and TANGENT, including alpha
-and transformed tangent handedness. FBX/OBJ color/tangent channels remain rejected
-until equivalent adapter handling is added. Missing colors are white and missing
+explicitly. GLB/glTF and FBX/OBJ adapters preserve vertex colors and available
+tangents, including alpha and transformed tangent handedness. FBX tangent data
+requires source bitangents to determine handedness; UV convention conversion is
+accounted for in its sign. Missing colors are white and missing
 tangents use the historical zero marker; no tangent generation is claimed.
 Collision is opt-in through a separate JSON recipe and is otherwise explicitly
 reported as not generated. See [collision implementation](collision-format.md).

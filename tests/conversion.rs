@@ -219,6 +219,30 @@ fn gltf_preserves_colors_and_transforms_tangent_handedness() {
 }
 
 #[test]
+fn fbx_preserves_color_alpha_and_tangent_sign_across_uv_and_transform_reflections() {
+    let temporary = tempfile::tempdir().unwrap();
+    let output = temporary.path().join("out");
+    let manifest = convert(
+        Path::new("tests/fixtures/attributes.fbx"),
+        &output,
+        &Config {
+            metres_per_stud: 1.,
+            obj_metres_per_unit: None,
+        },
+    )
+    .unwrap();
+    assert_eq!(manifest.meshes.len(), 1);
+    let bytes = fs::read(output.join(&manifest.meshes[0].file)).unwrap();
+    assert_eq!(manifest.meshes[0].vertices, 3);
+    for vertex in 0..3 {
+        assert_eq!(
+            &bytes[25 + vertex * 40 + 32..25 + vertex * 40 + 40],
+            &[0, 127, 127, 254, 51, 102, 153, 204]
+        );
+    }
+}
+
+#[test]
 fn real_assets_encode_deterministically_with_consistent_native_layout() {
     let temporary = tempfile::tempdir().unwrap();
     let config = Config {
