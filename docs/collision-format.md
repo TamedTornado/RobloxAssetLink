@@ -30,3 +30,26 @@ established. v8 encoding may be required; do not paper over that with a cloud co
 The CLI emits `.physics` sidecars with hashes and hull counts. This does not yet
 wire them into native place instances. Scene assembly and collision property
 binding belong to the corresponding place/model work.
+
+## Installed executable inspection (2026-09-25)
+
+Target: `version-c792f79abddd41bd/RobloxStudioBeta.exe`, SHA-256
+`a0f2e5dfeaacc86a8329f6e41b8082940a64837dca707899a6a7350a0c9a49bf`.
+Static inspection only; no patching, injection or Studio process was required.
+
+- At virtual address `0x143336cdc`, header parsing checks the CSGPHS signature;
+  `0x143336cf4` reads a 32-bit version at offset six. The following check rejects
+  versions greater than eight. The pre-v7 branch uses a ten-byte header except
+  v6, which advances fifty bytes, matching its additional physical properties.
+- The parser factory at `0x143336ae0` dispatches version eight separately from
+  the older reader. This is stronger evidence of retained older-format parsing
+  than the presence of version strings alone.
+- The migration function containing the diagnostic about already-v8 input is
+  `0x143339a00`. It rejects version >=8 at `0x143339a69`, handles physical
+  properties specially for v6/v7, and invokes another path for earlier input.
+- Reflection registration references `PhysicalConfigData` at `0x14016b6f8`,
+  and `PhysicsData` at `0x1401823e1` and `0x14018b1e1`.
+
+Inference: v5 is still a meaningful input candidate in this installed build;
+we have not proved that a MeshPart instantiated from our generated place will
+use it correctly. That remains an engine acceptance test, not a static claim.
