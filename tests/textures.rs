@@ -13,6 +13,59 @@ fn config(operation: Operation) -> Config {
 }
 
 #[test]
+fn bc4_scalar_blocks_decode_independently_with_bounded_loss_and_full_mips() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    let image = image::GrayImage::from_fn(5, 3, |x, y| image::Luma([(x * 40 + y * 20) as u8]));
+    image.save(root.join("source.png")).unwrap();
+    let mut policy = config(Operation::Roughness);
+    policy.max_width = 5;
+    policy.max_height = 3;
+    policy.output = roblox_asset_link::texture::Output::DdsBc4 {
+        mipmaps: true,
+        max_output_bytes: 160,
+    };
+    convert(&root.join("source.png"), &root.join("first"), &policy).unwrap();
+    convert(&root.join("source.png"), &root.join("second"), &policy).unwrap();
+    let path = root.join("first/roughness.dds");
+    let bytes = fs::read(&path).unwrap();
+    assert_eq!(bytes, fs::read(root.join("second/roughness.dds")).unwrap());
+    assert_eq!(bytes.len(), 160); // 5x3: 16 bytes; 2x1: 8; 1x1: 8
+    assert_eq!(&bytes[84..88], b"ATI1");
+    assert_eq!(u32::from_le_bytes(bytes[28..32].try_into().unwrap()), 3);
+    ffmpeg_next::init().unwrap();
+    let mut input = ffmpeg_next::format::input(&path).unwrap();
+    let mut decoder = ffmpeg_next::codec::context::Context::from_parameters(
+        input.stream(0).unwrap().parameters(),
+    )
+    .unwrap()
+    .decoder()
+    .video()
+    .unwrap();
+    let mut packet = ffmpeg_next::Packet::empty();
+    packet.read(&mut input).unwrap();
+    decoder.send_packet(&packet).unwrap();
+    let mut frame = ffmpeg_next::frame::Video::empty();
+    decoder.receive_frame(&mut frame).unwrap();
+    assert_eq!(frame.format(), ffmpeg_next::format::Pixel::RGBA);
+    assert_eq!((frame.width(), frame.height()), (5, 3));
+    for (x, y, pixel) in image.enumerate_pixels() {
+        let actual = frame.data(0)[y as usize * frame.stride(0) + x as usize * 4];
+        assert!(
+            actual.abs_diff(pixel[0]) <= 15,
+            "({x},{y}): {actual} != {}",
+            pixel[0]
+        );
+    }
+    policy.output = roblox_asset_link::texture::Output::DdsBc4 {
+        mipmaps: true,
+        max_output_bytes: 159,
+    };
+    assert!(convert(&root.join("source.png"), &root.join("bad"), &policy).is_err());
+    assert!(!root.join("bad").exists());
+}
+
+#[test]
 fn native_scalar_dds_cli_is_decodable_and_rejects_wrong_semantics() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();

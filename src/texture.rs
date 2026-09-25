@@ -26,6 +26,11 @@ pub enum Output {
         mipmaps: bool,
         max_output_bytes: u64,
     },
+    #[serde(rename_all = "camelCase")]
+    DdsBc4 {
+        mipmaps: bool,
+        max_output_bytes: u64,
+    },
 }
 
 #[derive(Deserialize)]
@@ -59,13 +64,13 @@ pub struct Texture {
 }
 
 pub fn convert(source: &Path, output: &Path, config: &Config) -> Result<Manifest> {
-    if matches!(config.output, Output::DdsL8 { .. })
+    if matches!(config.output, Output::DdsL8 { .. } | Output::DdsBc4 { .. })
         && !matches!(
             config.operation,
             Operation::Roughness | Operation::Metalness | Operation::GltfMetallicRoughness
         )
     {
-        return Err("ddsL8 output requires linear scalar roughness/metalness maps".into());
+        return Err("scalar DDS output requires linear roughness/metalness maps".into());
     }
     if config.max_width == 0 || config.max_height == 0 || config.max_decoded_bytes == 0 {
         return Err("texture decode limits must be positive".into());
@@ -145,6 +150,17 @@ pub fn convert(source: &Path, output: &Path, config: &Config) -> Result<Manifest
     let mut textures = Vec::new();
     for (semantic, color_space, image) in images {
         let (extension, bytes) = match config.output {
+            Output::DdsBc4 {
+                mipmaps,
+                max_output_bytes,
+            } => (
+                "dds",
+                crate::texture_dds::encode_bc4(
+                    image.as_luma8().ok_or("DDS scalar image expected")?,
+                    mipmaps,
+                    max_output_bytes,
+                )?,
+            ),
             Output::Png => {
                 let mut bytes = Cursor::new(Vec::new());
                 image.write_to(&mut bytes, ImageFormat::Png)?;

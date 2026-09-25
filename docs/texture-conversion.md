@@ -24,7 +24,19 @@ or guessed normal-channel swizzle is applied to these scalar maps. Independent
 FFmpeg decoding checks the base level; format-header and exact mip-byte tests
 check the chain, deterministic bytes and configured budget. Material/bundle tests
 verify native local DDS references and atomic failure cleanup. Renderer acceptance
-is still unverified. Compressed/color/normal DDS profiles remain unfinished.
+is still unverified. Color/normal DDS profiles remain unfinished.
+
+The same scalar operations also accept `"format":"ddsBc4"`, with the same
+required `mipmaps` and `maxOutputBytes` fields. This emits unsigned BC4 blocks
+under the native reader's ATI1 FOURCC. Each 4 × 4 block stores min/max scalar
+endpoints and nearest interpolated palette indices; constant blocks are exact.
+This is an explicitly lossy range-fit profile, not an optimal endpoint search.
+Partial edge blocks replicate their final row/column; mip tail levels still
+occupy a complete eight-byte block. Mips are generated from uncompressed scalar
+samples before compression, never from already lossy blocks. Tests independently
+decode BC4 through FFmpeg, check non-block-aligned dimensions and sample error,
+exact constant-block bytes, mip-tail sizes, repeatability and budget rejection.
+No compression library, external executable or cloud cooking is involved.
 
 Operations:
 
@@ -194,7 +206,7 @@ every device supports the same payload.
 
 **Implementation consequence:** PNG normalization is not yet the whole offline
 texture pipeline. The scalar DDS/mipmap profile above starts the native-output
-implementation; compressed/color/normal profiles still need semantic filtering
+implementation; color/normal profiles still need semantic filtering
 and independent decoding tests. Do not silently replace PNGs with a
 guessed platform cache. Keep TexturePack material descriptors separate from pixel
 encoding. Further evidence is needed for the marked normal encoding and the
