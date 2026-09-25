@@ -16,7 +16,7 @@ Checked September 25, 2026 against Roblox's
 | --- | --- |
 | Native `.mesh` | Our independently encoded v2 and v4.01 files were accepted and loaded through typed MeshParts in Studio. Byte-preserving remote storage is not established. |
 | PNG | Accepted and successfully preloaded in an ImageLabel. This does not prove unchanged runtime bytes or no further server processing. |
-| DDS | The correctly labeled BC4 DDS probe failed with InvalidImage. |
+| DDS | Studio loads our BC4, L8 and RGBA8 outputs. The Image upload endpoint rejects BC4 with InvalidImage and the uncompressed controls with Unsupported image format. Engine readability and upload admission are different boundaries. |
 | TexturePack XML | Accepted and approved using asset type TexturePack, despite omission from the guide's limited table. Remote-linked pack rendering remains unverified. |
 | Ogg Vorbis | Accepted, decoded and reported the expected duration in Studio; byte-preserving deployment is not established. |
 | VP9/Vorbis WebM | The zero-price VP9 WebM probe was blocked by HTTP 403 requiring account ID verification, before format admission. The guide lists MP4/MOV; substituting source MP4 would abandon the preconverted-output boundary. |

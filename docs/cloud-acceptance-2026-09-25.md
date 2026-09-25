@@ -38,6 +38,19 @@ The other uploaded fixtures are original synthetic repository test content.
   with `InvalidArgument / InvalidImage`. No PNG rename, MIME disguise or cloud
   source-conversion fallback was used. This is a failed deployment route, not a
   claim that the independently tested DDS encoder is corrupt.
+  Follow-up differential testing established that Studio's own image loader
+  accepts our BC4, uncompressed L8 and uncompressed RGBA8 DDS outputs: all three
+  returned successful preload status and `ImageLabel.IsLoaded == true` after
+  attachment to a temporary CoreGui ScreenGui and a one-second fixture observation
+  delay. A PNG control passed identically. An unattached ImageLabel misleadingly
+  reports IsLoaded false even for the PNG, so that initial probe was discarded as
+  an inadequate test of decoding. The uncompressed variants were also uploaded
+  with the same correct DDS MIME type: operations
+  `411e6385-2af5-4cd9-b85f-b928780350f3` (L8) and
+  `f633d169-1d35-47c1-be01-2049810a2ada` (RGBA8) both completed with
+  `InvalidArgument / Unsupported image format.` This distinguishes native-engine
+  readability from this API's image-upload acceptance. It does not identify the
+  cloud validator's internal implementation, nor prove pixel-perfect rendering.
 - **TexturePack:** contrary to the upload guide's limited table, native XML
   submitted with asset type TexturePack and `application/xml` was accepted and
   approved. Initial local-reference fixture: asset 134074479993995. The properly
