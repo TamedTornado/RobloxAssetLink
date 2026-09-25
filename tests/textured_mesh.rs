@@ -3,6 +3,68 @@ use roblox_asset_link::convert::{Config, convert};
 use serde_json::json;
 use std::{fs, path::Path};
 
+fn assert_deployment_keeps_explicit_maps(
+    bundle: &Path,
+    manifest: &roblox_asset_link::bundle::Manifest,
+) {
+    use rbx_dom_weak::types::{Content, Variant};
+    use roblox_asset_link::{bundle_verify, deployment};
+
+    let verification = bundle_verify::verify(bundle).unwrap();
+    let mapping = deployment::Mapping {
+        bundle_manifest_sha256: verification.manifest_sha256,
+        bindings: manifest
+            .files
+            .iter()
+            .enumerate()
+            .map(|(index, file)| deployment::Binding {
+                asset: file.asset.clone(),
+                file: file.file.clone(),
+                source_artifact_sha256: file.sha256.clone(),
+                remote_id: (1000 + index).to_string(),
+            })
+            .collect(),
+    };
+    let output = bundle.parent().unwrap().join("deployed.rbxm");
+    let result = deployment::link_scene(bundle, "box-model", &mapping, &output).unwrap();
+    assert!(!result.engine_verified);
+    assert!(!result.published);
+
+    let linked = rbx_binary::from_reader(fs::File::open(output).unwrap()).unwrap();
+    let part = linked.get_by_ref(linked.root().children()[0]).unwrap();
+    let surface = linked.get_by_ref(part.children()[0]).unwrap();
+    for (suffix, property, is_content) in [
+        ("color.png", "ColorMapContent", true),
+        ("texturepack.xml", "TexturePack", false),
+    ] {
+        let binding = mapping
+            .bindings
+            .iter()
+            .find(|binding| binding.file.ends_with(suffix))
+            .unwrap();
+        let uri = format!("rbxassetid://{}", binding.remote_id);
+        let expected = if is_content {
+            Variant::Content(Content::from_uri(uri))
+        } else {
+            Variant::ContentId(uri.into())
+        };
+        assert_eq!(surface.properties[&property.into()], expected);
+    }
+
+    // The original live probe mistakenly supplied only TexturePack. Deployment
+    // must retain the individual map: the edit-mode renderer needs it as well.
+    let mut pack_only_mapping = mapping;
+    pack_only_mapping
+        .bindings
+        .retain(|binding| !binding.file.ends_with("color.png"));
+    let missing_output = bundle.parent().unwrap().join("pack-only.rbxm");
+    let failure = deployment::link_scene(bundle, "box-model", &pack_only_mapping, &missing_output)
+        .err()
+        .unwrap();
+    assert!(failure.to_string().contains("missing remote ID binding"));
+    assert!(!missing_output.exists());
+}
+
 fn config() -> Config {
     serde_json::from_value(json!({"metresPerStud":0.28,"materials":{
         "localUriPrefix":"rbxasset://box/","maxWidth":256,"maxHeight":256,"maxDecodedBytes":1048576
@@ -130,6 +192,7 @@ fn independent_textured_glb_preserves_uvs_and_material_dependencies_through_bund
     let part = scene.get_by_ref(scene.root().children()[0]).unwrap();
     let surface = scene.get_by_ref(part.children()[0]).unwrap();
     assert_eq!(surface.properties, material.properties);
+    assert_deployment_keeps_explicit_maps(&bundle, &manifest);
     let repeat = temp.path().join("repeat");
     roblox_asset_link::bundle::build(&plan_path, &repeat).unwrap();
     assert_eq!(

@@ -59,7 +59,8 @@ The other uploaded fixtures are original synthetic repository test content.
   was built with canonical reflection property `TexturePack`; its serialized
   name is `TexturePackContentId`. However, PreloadAsync did **not** report that
   hidden pack dependency, so the pack test did not emit its PASS marker. Cloud
-  admission is proved; material rendering remains unverified. Do not equate the
+  admission is proved. The visual comparison below verifies explicit color-map
+  rendering, but not consumption of the generated pack itself. Do not equate the
   successful mesh preload in that scene with successful TexturePack rendering.
 - **Place creation:** native RBXL submitted as Place with
   `application/octet-stream` produced operation
@@ -78,6 +79,45 @@ Issue 9 remains open. The tests do not establish full game publication, PBR pack
 rendering, mobile playback, or a working direct DDS/WebM publication route.
 
 ## Test-harness repair
+
+### Gray material: an incomplete acceptance scene
+
+The initial scene contained only `SurfaceAppearance.TexturePack`, with no
+`ColorMapContent`. Engine inspection confirmed ColorMap was empty and
+ColorMapContent had SourceType None. That hand-authored probe did not match the
+material converter's output, which already emits both references.
+
+An isolated three-way comparison used the same mesh and camera, full white
+ambient lighting, and the same uploaded cyan image:
+
+| Material references | Observed Studio edit-mode rendering |
+| --- | --- |
+| TexturePack only | Gray |
+| Explicit ColorMapContent only | Cyan |
+| TexturePack and explicit ColorMapContent | Cyan |
+
+Jason supplied the desktop screenshot of the labeled comparison on September 25;
+its SHA-256 is `ccfb40c41acbe608fe259567ed57dd3a2acfa597f3859e8c7bfd9a5e7753b297`.
+The unrelated black always-on-top Wine/Studio window artifact is not part of the
+mesh. No Rojo connection to LayerOne was made.
+
+This isolates the gray material to the incomplete acceptance scene for this
+Studio rendering path. It does **not** prove the pack was read, parsed, or used:
+the explicit map also works without it. The pack-only runtime/publication path
+remains unverified. In particular, do not remove explicit map properties or
+claim a pack-format repair based on this screenshot.
+
+The textured-mesh regression now follows the actual GLB material conversion,
+bundle scene attachment, deployment linking, and native scene decoding. It
+asserts preservation of both the explicit color map and pack reference, and
+rejects deployment with the color-map binding omitted. This covers the production
+path rather than treating a manually reconstructed pack-only scene as its output.
+
+The attempted plugin screenshot-permission call returned `Feature not supported
+yet.` The temporary capture plugin was removed; desktop visual evidence above
+does not depend on that API. Studio sign-in was separately repaired by exposing
+the existing Vinegar desktop entry in the standard per-user applications folder,
+which GNOME's session could see. No credential or Wine security changes were made.
 
 The first mesh probe passed a URI string to PreloadAsync; Roblox interpreted it
 as an image request and returned `AssetDelivery403IncorrectAssetType`. Passing
