@@ -34,7 +34,7 @@ const MATERIALS: [&str; 23] = [
     "Pavement",
 ];
 /// Fixed native terrain cell resolution, not a project unit convention.
-const STUDS_PER_VOXEL: f64 = 4.;
+pub(crate) const STUDS_PER_VOXEL: f64 = 4.;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]

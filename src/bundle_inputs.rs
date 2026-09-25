@@ -140,7 +140,8 @@ pub(crate) fn collect(source: &Path, plan: &Plan) -> Result<Inputs> {
     };
     for asset in &plan.assets {
         let input = match &asset.conversion {
-            Conversion::MediaSource { source, .. }
+            Conversion::Terrain { source }
+            | Conversion::MediaSource { source, .. }
             | Conversion::Media { source }
             | Conversion::Video { source, .. }
             | Conversion::MaterialGltf { source, .. }
@@ -157,6 +158,17 @@ pub(crate) fn collect(source: &Path, plan: &Plan) -> Result<Inputs> {
         let mut files = BTreeMap::new();
         record(root, &input, &mut files)?;
         match &asset.conversion {
+            Conversion::Terrain { .. } => {
+                let spec: crate::terrain::Specification =
+                    serde_json::from_slice(&fs::read(&input)?)?;
+                if let crate::terrain::Specification::Heightmap { source, .. } = spec {
+                    record(
+                        root,
+                        &crate::terrain::image_source(&input, &source)?,
+                        &mut files,
+                    )?;
+                }
+            }
             Conversion::Material { .. } => {
                 let spec: crate::material::Specification =
                     serde_json::from_slice(&fs::read(&input)?)?;

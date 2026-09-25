@@ -39,6 +39,9 @@ pub struct Asset {
     deny_unknown_fields
 )]
 pub enum Conversion {
+    Terrain {
+        source: PathBuf,
+    },
     MediaSource {
         source: PathBuf,
         config: crate::media_transcode::Config,
@@ -202,6 +205,10 @@ fn build_asset(
     skin: &mut Option<crate::skin_import::Manifest>,
 ) -> Result<Vec<String>> {
     match &asset.conversion {
+        Conversion::Terrain { source } => {
+            let manifest = crate::terrain::convert(&local(root, source)?, output)?;
+            Ok(vec![manifest.file.into()])
+        }
         Conversion::MediaSource { source, config } => {
             fs::create_dir(output)?;
             let manifest = crate::media_transcode::convert(

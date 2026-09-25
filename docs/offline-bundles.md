@@ -83,6 +83,12 @@ targets or wrong conversion types fail before publishing a bundle.
 the source-node/bind hierarchy in its conversion manifest.
 Scene sources use the existing typed scene format and compiler gate.
 
+`terrain` accepts a terrain specification containing sparse voxels or a scalar
+PNG heightmap and emits `terrain.smoothgrid`. Terrain scene nodes can bind it to
+`SmoothGrid`; image dependencies participate in cache invalidation. This does not
+generate a physics cache or establish engine acceptance. See
+[terrain conversion and its explicit boundaries](terrain-format.md).
+
 `material` accepts a `source` material JSON document as described in
 [texture/material conversion](texture-conversion.md). It emits a native
 SurfaceAppearance and all referenced normalized maps. The bundle linker replaces

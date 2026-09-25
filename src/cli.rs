@@ -74,6 +74,12 @@ enum Build {
 
 #[derive(Subcommand)]
 enum Convert {
+    /// Convert configured sparse voxels or a scalar heightmap to SmoothGrid bytes.
+    Terrain {
+        source: PathBuf,
+        #[arg(long)]
+        output: PathBuf,
+    },
     /// Transcode a local video/audio source to combined VP9/Vorbis WebM.
     Media {
         source: PathBuf,
@@ -203,6 +209,13 @@ enum Assets {
 }
 
 fn execute(cli: Cli) -> Result<Value> {
+    if let Command::Convert {
+        command: Convert::Terrain { source, output },
+    } = &cli.command
+    {
+        let result = roblox_asset_link::terrain::convert(source, output)?;
+        return Ok(json!({"ok":true,"scope":"offlineConversion","result":result}));
+    }
     if let Command::Convert {
         command:
             Convert::AnimationFbx {

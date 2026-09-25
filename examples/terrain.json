@@ -1,0 +1,16 @@
+{
+  "kind": "voxels",
+  "config": {
+    "metresPerStud": 0.5,
+    "voxelSizeMetres": 2,
+    "originMetres": [0, 0, 0],
+    "alignmentToleranceMetres": 0.00001,
+    "chunkExponent": 4,
+    "limits": { "maxChunks": 16, "maxCells": 65536 },
+    "materials": { "ground": "Grass", "rock": "Rock" }
+  },
+  "voxels": [
+    { "position": [-1, 0, 0], "material": "ground", "occupancy": 1 },
+    { "position": [0, 0, 0], "material": "rock", "occupancy": 0.5 }
+  ]
+}

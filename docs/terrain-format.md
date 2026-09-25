@@ -102,8 +102,51 @@ origins, negative chunk boundaries, native X/Z/Y order, deterministic source-ord
 independence and configured resource rejection. Reconstructing the independent
 Rojo fixture as sparse Grass/Rock voxels and re-encoding reproduces all original
 bytes. This is stronger than a self-generated roundtrip, but still not live
-rendering/physics acceptance. Heightmap/CLI/bundle conversion and PhysicsGrid
-handling remain to be completed.
+rendering/physics acceptance. PhysicsGrid handling remains to be established.
+
+## Heightmaps and the conversion boundary
+
+`roblox convert terrain terrain.json --output NEW_DIRECTORY` emits
+`terrain.smoothgrid` and a manifest. The input is tagged `kind: "voxels"` with
+`config` and `voxels` as described above; [the example](../examples/terrain.json)
+is self-contained. `kind: "heightmap"` instead takes a contained relative `source`
+image path and a heightmap `config`:
+
+- `terrain`: the same complete voxel configuration, including metric origin,
+  chunking, aliases and resource budgets.
+- `material`: a configured non-Air alias for the columns.
+- `pixelSizeMetres`: one native voxel per pixel; resampling is not implicit.
+- `floorMetres`, `heightMinMetres`, `heightMaxMetres`: vertical offsets relative
+  to the configured origin. Floor must be grid-aligned; range must be finite,
+  ordered and at or above the floor. Empty columns emit no occupied cells.
+- `rowDirection`: `positive` or `negative` Z. Columns advance in positive X;
+  pixel (0,0) starts at the configured X/Z origin. Negative rows are not silently
+  rebased to a different origin.
+- `maxWidth`, `maxHeight`, `maxDecodedBytes`: explicit image decode policy in
+  addition to the terrain chunk/cell budgets.
+
+The supported image profile is scalar grayscale PNG with 8- or 16-bit samples.
+Values linearly interpolate the metric height range; no sRGB/luminance transform
+is applied. RGB, alpha-bearing images and unapplied orientation fail. The adapter
+fills columns from the floor to the sampled surface, quantizing only the final
+partial cell through the established native occupancy rule. It is a local
+heightfield algorithm, not a reproduction claim about Studio's terrain importer.
+
+Bundle assets accept `{"id":"land","conversion":{"kind":"terrain","source":"terrain.json"}}`.
+A Terrain scene node binds the payload through
+`"assets":{"SmoothGrid":{"asset":"land","file":"terrain.smoothgrid"}}`.
+The bundle source inventory includes referenced heightmap bytes, so image changes
+invalidate the terrain conversion cache. Integration tests compare embedded native
+Terrain bytes with standalone conversion, check cache hits/invalidation, and reject
+missing inputs. Referenced image paths cannot escape the heightmap document
+directory; conversion never overwrites an existing output directory.
+
+The conversion manifest explicitly reports `physicsGenerated: false` and
+`engineVerified: false`. **This is a generated SmoothGrid payload, not yet a proven
+playable terrain artifact.** It neither invents PhysicsGrid bytes nor copies a
+fixture's unrelated physics data into newly generated terrain. Establishing whether
+current engines regenerate that data, or what must be generated locally, remains
+part of the open terrain issue.
 
 ### Installed-reader evidence
 
@@ -129,8 +172,9 @@ live engine acceptance or proof that PhysicsGrid can be omitted. No executable
 bytes, proprietary assets, decompiled source or leaked source are committed.
 
 [Issue 10](https://github.com/TamedTornado/RobloxAssetLink/issues/10) tracks the
-missing Rust voxel/heightmap-to-native encoding, format investigation, chunk/
-occupancy/material validation and integration. Resolution, metric dimensions,
-material mappings and resource policy must be validated external configuration.
+remaining PhysicsGrid relationship, native-format coverage and acceptance work.
+Rust voxel/heightmap encoding and CLI/bundle integration are implemented for the
+documented version-one profile, with metric dimensions, aliases and resource
+policy supplied as validated external configuration.
 It is the separate terrain implementation issue requested by issue 7, not a
 claim that terrain generation is finished.
