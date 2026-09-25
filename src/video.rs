@@ -26,6 +26,7 @@ pub struct Manifest {
     pub sha256: String,
     pub engine_verified: bool,
     pub codec_library_version: String,
+    pub source_start_micros: i64,
 }
 
 fn pending(error: av::Error) -> bool {
@@ -130,6 +131,15 @@ fn frames(
 }
 
 pub fn convert(source: &Path, output: &Path, config: &Config) -> Result<Manifest> {
+    convert_track(source, output, config, false)
+}
+
+pub(crate) fn convert_track(
+    source: &Path,
+    output: &Path,
+    config: &Config,
+    with_audio: bool,
+) -> Result<Manifest> {
     if config.max_width == 0
         || config.max_height == 0
         || config.max_frames == 0
@@ -151,10 +161,24 @@ pub fn convert(source: &Path, output: &Path, config: &Config) -> Result<Manifest
     options.set("err_detect", "explode");
     let mut input = av::format::input_with_dictionary(&source, options)?;
     let declared_duration = input.duration();
-    if input.nb_streams() != 1 {
+    let valid_streams = if with_audio {
+        input.nb_streams() == 2
+            && input
+                .streams()
+                .filter(|s| s.parameters().medium() == av::media::Type::Audio)
+                .count()
+                == 1
+    } else {
+        input.nb_streams() == 1
+    };
+    if !valid_streams {
         return Err("video profile requires one video stream; audio/subtitles must not be silently discarded".into());
     }
-    let stream = input.stream(0).ok_or("missing video stream")?;
+    let stream = input
+        .streams()
+        .find(|s| s.parameters().medium() == av::media::Type::Video)
+        .ok_or("missing video stream")?;
+    let video_index = stream.index();
     if stream.parameters().medium() != av::media::Type::Video {
         return Err("input is not a video stream".into());
     }
@@ -164,6 +188,18 @@ pub fn convert(source: &Path, output: &Path, config: &Config) -> Result<Manifest
     let rate = stream.avg_frame_rate();
     let time_base = stream.time_base();
     let declared_frames = stream.frames();
+    let declared_duration = if with_audio {
+        use av::Rescale;
+        if stream.duration() > 0 {
+            stream
+                .duration()
+                .rescale(time_base, av::Rational(1, av::ffi::AV_TIME_BASE))
+        } else {
+            0
+        }
+    } else {
+        declared_duration
+    };
     if rate.numerator() <= 0
         || rate.denominator() <= 0
         || time_base.numerator() <= 0
@@ -244,6 +280,9 @@ pub fn convert(source: &Path, output: &Path, config: &Config) -> Result<Manifest
         let mut packet = av::Packet::empty();
         match packet.read(&mut input) {
             Ok(()) => {
+                if packet.stream() != video_index {
+                    continue;
+                }
                 if packet.is_corrupt() {
                     return Err("corrupt video packet".into());
                 }
@@ -285,6 +324,13 @@ pub fn convert(source: &Path, output: &Path, config: &Config) -> Result<Manifest
             av::codec::version(),
             av::format::version()
         ),
+        source_start_micros: {
+            use av::Rescale;
+            timeline
+                .origin
+                .ok_or("missing video origin")?
+                .rescale(time_base, av::Rational(1, av::ffi::AV_TIME_BASE))
+        },
     };
     temporary.persist_noclobber(output)?;
     Ok(manifest)

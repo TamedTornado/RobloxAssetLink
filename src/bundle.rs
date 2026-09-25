@@ -25,6 +25,10 @@ pub struct Asset {
 #[derive(Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 pub enum Conversion {
+    MediaSource {
+        source: PathBuf,
+        config: crate::media_transcode::Config,
+    },
     Media {
         source: PathBuf,
     },
@@ -123,6 +127,19 @@ fn key(id: &str) -> String {
 
 fn build_asset(root: &Path, output: &Path, asset: &Asset, uri_prefix: &str) -> Result<Vec<String>> {
     match &asset.conversion {
+        Conversion::MediaSource { source, config } => {
+            fs::create_dir(output)?;
+            let manifest = crate::media_transcode::convert(
+                &local(root, source)?,
+                &output.join("video.webm"),
+                config,
+            )?;
+            fs::write(
+                output.join("manifest.json"),
+                serde_json::to_vec_pretty(&manifest)?,
+            )?;
+            Ok(vec!["video.webm".into()])
+        }
         Conversion::Media { source } => {
             fs::create_dir(output)?;
             let manifest =

@@ -107,7 +107,7 @@ Tests decode the VP9 output of an independently encoded synthetic H.264 fixture,
 check dimensions/timestamps, deterministic bytes, no-overwrite, limits and
 truncation, then run CLI without PATH and bundle/native scene binding. This is a
 working **silent-video profile**, not completion of general video conversion.
-Direct conversion of source videos containing audio, broader color/timing profiles and
+Broader color/timing profiles and
 actual Roblox playback/deployment acceptance remain open. `engineVerified` stays
 false: codec/container correctness is not engine acceptance.
 
@@ -152,8 +152,8 @@ timestamp resolution, deterministic bytes, no-overwrite, CLI/bundle equivalence,
 and exact decoded Vorbis samples before/after muxing. An independent Opus fixture
 additionally proves preservation of initial codec delay and final padding through
 the WebM container. All 9600 decoded samples survive unchanged. Input conversion
-and runtime playback remain separate: combined MP4 audio/video source conversion
-and actual Roblox VideoFrame acceptance are still unverified/unfinished.
+and runtime playback remain separate; actual Roblox VideoFrame acceptance is
+still unverified. Combined-source conversion is described below.
 
 The mux verification exposed a pre-existing audio-container interoperability
 defect: the short Vorbis output's single data page let FFmpeg infer the initial
@@ -165,3 +165,29 @@ regression requires 4410 decoded samples through FFmpeg both before and after
 muxing, while the independent libvorbis tests continue to require the same count.
 Compressed sample data is unchanged by muxing; the source writer's Ogg framing
 is corrected rather than weakening the sample-count assertion.
+
+## Combined-source conversion
+
+`roblox convert media SOURCE --config CONFIG --output combined.webm` handles a
+local MP4/MOV or Matroska/WebM with exactly one video and one audio stream.
+The JSON config contains the existing `video` and `audio` policy objects plus
+positive `maxPackets` for final muxing. Bundle kind `mediaSource` accepts the
+same source/config and emits one combined `video.webm` artifact.
+
+The video uses the same validated VP9 conversion, not a second encoder path.
+Audio is decoded in process to temporary lossless float WAV, then uses the same
+Vorbis writer and muxer. Mono/stereo planar float32 decoder output is supported;
+other formats, changing rates/channel counts and discontinuous timestamps fail.
+There is no implicit downmix or resampling. The source's actual video origin is
+recorded; the audio origin determines its mux offset, rounded to milliseconds.
+Audio beginning before video is explicitly unsupported, rather than truncated.
+
+AAC may decode a padded final block beyond the declared stream sample duration.
+Only that codec's final excess is cropped; the manifest reports
+`sourceAudioPaddingFramesRemoved`. Other duration mismatches fail. A fixture
+with 8820 real audio samples requires removal of 396 padded samples. Independent
+final WebM decoding verifies all 8820 samples and a waveform MSE below 0.0001
+against the synthetic sine; the four video frames, rate and both codecs are
+retained. CLI-without-PATH, deterministic repeat, bundle equivalence, no-overwrite
+and policy failure tests pass. Intermediate files are automatically removed.
+These are offline codec/container tests, not Roblox runtime acceptance.
