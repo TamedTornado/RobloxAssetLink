@@ -27,9 +27,9 @@ MeshParts or bind collision data, pivots, materials or terrain. Those are still
 issue 7 work; plain instance serialization alone does not close it. Likewise,
 no remote asset ids are generated here and no game is published.
 
-Serialization explicitly selects the pinned bundled reflection database. However,
-rbx_binary 3.0.0's constructor first consults its local override mechanism. The
-command surfaces any error rather than allowing the constructor to panic, and
-does not use the override for output semantics. Eliminating that initial lookup
-is still required for issue 8's strict hermetic-build acceptance. Do not claim
-that requirement complete based on byte repeatability in a clean environment.
+Serialization uses the pinned bundled reflection database. The dependency's
+`debug_always_use_bundled` Cargo feature bypasses local lookup in both debug and
+release builds, despite its name. A subprocess regression supplies a deliberately
+invalid `RBX_DATABASE` file and proves identical output rather than relying on a
+clean environment. This addresses the reflection lookup boundary, not all of
+issue 8's remaining build/link/script requirements.

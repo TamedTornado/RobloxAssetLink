@@ -169,11 +169,8 @@ pub fn build(source: &Path, output: &Path) -> Result<BuildResult> {
         link(&mut dom, node, &ids)?;
     }
     let mut bytes = Vec::new();
-    // The library constructor consults a local reflection override. Surface its
-    // error instead of allowing its unwrap to panic, then use the pinned bundled
-    // database for serialization. Removing that constructor lookup is tracked in
-    // the hermetic build issue; local overrides must never alter output semantics.
-    rbx_reflection_database::get()?;
+    // Cargo enables the library's always-bundled feature, including its constructor.
+    // Neither RBX_DATABASE nor a user's local reflection cache affects this build.
     rbx_binary::Serializer::new()
         .reflection_database(rbx_reflection_database::get_bundled())
         .serialize(&mut bytes, &dom, dom.root().children())?;

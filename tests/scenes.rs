@@ -118,3 +118,31 @@ fn place_cli_builds_offline_and_script_paths_cannot_escape() {
     );
     assert!(!rejected.exists());
 }
+
+#[test]
+fn scene_build_ignores_ambient_reflection_database_overrides() {
+    let temporary = tempfile::tempdir().unwrap();
+    let source = temporary.path().join("scene.json");
+    fs::write(&source, serde_json::to_vec(&specification()).unwrap()).unwrap();
+    fs::write(temporary.path().join("logic.luau"), "return {}").unwrap();
+    let baseline = temporary.path().join("baseline.rbxm");
+    build(&source, &baseline).unwrap();
+    let invalid_database = temporary.path().join("invalid.msgpack");
+    fs::write(&invalid_database, b"not a reflection database").unwrap();
+    let output = temporary.path().join("actual.rbxm");
+    let result = std::process::Command::new(env!("CARGO_BIN_EXE_roblox"))
+        .env_clear()
+        .env("RBX_DATABASE", invalid_database)
+        .args(["build", "scene"])
+        .arg(source)
+        .arg("--output")
+        .arg(&output)
+        .output()
+        .unwrap();
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    assert_eq!(fs::read(baseline).unwrap(), fs::read(output).unwrap());
+}
