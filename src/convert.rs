@@ -56,6 +56,8 @@ pub struct CollisionEntry {
 }
 
 pub(crate) struct Output {
+    /// Original source point per output vertex (needed after FBX triangulation).
+    pub source_points: Vec<usize>,
     pub entry: Entry,
     pub bytes: Vec<u8>,
     pub geometry: mesh::Mesh,
@@ -214,6 +216,7 @@ pub(crate) fn visit(
                 base_color[3] = 1.;
             }
             outputs.push(Output {
+                source_points: (0..geometry.vertices.len()).collect(),
                 entry: Entry {
                     file: format!("node-{}-primitive-{primitive_index}.mesh", node.index()),
                     sha256: format!("{:x}", Sha256::digest(&bytes)),

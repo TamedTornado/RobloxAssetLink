@@ -1,4 +1,4 @@
-//! Native rigid-bind skin import; glTF mesh-node transforms do not affect skinning.
+//! Unified source skin conversion and native bundle output contract.
 use crate::{IDENTITY, Result, convert, skin};
 use glam::{Mat4, Vec4};
 use serde::{Deserialize, Serialize};
@@ -52,7 +52,7 @@ pub struct Manifest {
     pub engine_verified: bool,
 }
 
-fn validate_config(config: &Config) -> Result<()> {
+pub(crate) fn validate_config(config: &Config) -> Result<()> {
     if !config.metres_per_stud.is_finite()
         || config.metres_per_stud <= 0.
         || !config.cull_distance_metres.is_finite()
@@ -66,7 +66,7 @@ fn validate_config(config: &Config) -> Result<()> {
     Ok(())
 }
 
-fn cframe(matrix: Mat4, config: &Config) -> Result<[f32; 12]> {
+pub(crate) fn cframe(matrix: Mat4, config: &Config) -> Result<[f32; 12]> {
     let tolerance = config.rigid_tolerance;
     let x = matrix.x_axis.truncate();
     let y = matrix.y_axis.truncate();
@@ -217,6 +217,19 @@ fn skeleton(
 
 pub fn convert(source: &Path, output: &Path, config: &Config) -> Result<Manifest> {
     validate_config(config)?;
+    match source
+        .extension()
+        .and_then(|value| value.to_str())
+        .map(str::to_ascii_lowercase)
+        .as_deref()
+    {
+        Some("fbx") => crate::skin_fbx::convert(source, output, config),
+        Some("glb" | "gltf") => convert_gltf(source, output, config),
+        _ => Err("skin input must be GLB, glTF or FBX".into()),
+    }
+}
+
+fn convert_gltf(source: &Path, output: &Path, config: &Config) -> Result<Manifest> {
     let gltf = gltf::Gltf::from_slice(&fs::read(source)?)?;
     if gltf.extensions_used().next().is_some() {
         return Err("skin glTF extensions are not supported".into());
@@ -294,6 +307,14 @@ pub fn convert(source: &Path, output: &Path, config: &Config) -> Result<Manifest
         meshes: entries,
         engine_verified: false,
     };
+    write(output, manifest, files)
+}
+
+pub(crate) fn write(
+    output: &Path,
+    manifest: Manifest,
+    files: Vec<(String, Vec<u8>)>,
+) -> Result<Manifest> {
     fs::create_dir(output)?;
     let result = (|| -> Result<()> {
         for (name, bytes) in files {

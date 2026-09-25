@@ -66,7 +66,7 @@ enum Build {
 
 #[derive(Subcommand)]
 enum Convert {
-    /// Import rigid-bind GLB/glTF skins as native v4.01 meshes.
+    /// Import rigid-bind GLB/glTF or linear FBX skins as native v4.01 meshes.
     Skin {
         source: PathBuf,
         #[arg(long)]
@@ -168,7 +168,7 @@ fn execute(cli: Cli) -> Result<Value> {
     {
         let config = serde_json::from_slice(&std::fs::read(config)?)?;
         return Ok(
-            json!({"ok":true,"scope":"offlineConversion","result":roblox_asset_link::skin_gltf::convert(source,output,&config)?}),
+            json!({"ok":true,"scope":"offlineConversion","result":roblox_asset_link::skin_import::convert(source,output,&config)?}),
         );
     }
     if let Command::Convert {
@@ -284,7 +284,7 @@ fn execute(cli: Cli) -> Result<Value> {
             "localLuauCompilation":true,
             "offlineSceneSerialization":true,
             "offlineAssetBundleBuild":true,
-            "offlineConversion":["static-gltf-to-mesh-v2","static-fbx-to-mesh-v2","static-obj-to-mesh-v2","textures-to-png","collision-to-csgphs-v5","audio-to-ogg-vorbis","canonical-animation-to-rbxm","rigid-linear-gltf-animation-to-rbxm","rigid-bind-gltf-to-skinned-mesh-v4"],"offlineGameBuild":false,
+            "offlineConversion":["static-gltf-to-mesh-v2","static-fbx-to-mesh-v2","static-obj-to-mesh-v2","textures-to-png","collision-to-csgphs-v5","audio-to-ogg-vorbis","canonical-animation-to-rbxm","rigid-linear-gltf-animation-to-rbxm","rigid-bind-gltf-to-skinned-mesh-v4","linear-fbx-to-skinned-mesh-v4"],"offlineGameBuild":false,
             "serverExecutable":"roblox-server","requiresStudioForCatalog":false,
             "persistentStudioImport":false,"studioCommandExecution":false
         }}));

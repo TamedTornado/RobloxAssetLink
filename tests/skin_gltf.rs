@@ -1,4 +1,4 @@
-use roblox_asset_link::skin_gltf::{self, Config};
+use roblox_asset_link::skin_import::{self, Config};
 use serde_json::{Value, json};
 use std::{fs, path::Path};
 
@@ -17,7 +17,7 @@ fn khronos_rigged_simple_imports_without_changing_the_external_fixture() {
     let original = fs::read(&source).unwrap();
     let directory = tempfile::tempdir().unwrap();
     let output = directory.path().join("native");
-    let manifest = skin_gltf::convert(&source, &output, &config()).unwrap();
+    let manifest = skin_import::convert(&source, &output, &config()).unwrap();
     assert_eq!(
         manifest
             .rig
@@ -94,7 +94,7 @@ fn khronos_native_deformation_matches_source_inverse_bind_equations() {
     let directory = tempfile::tempdir().unwrap();
     let output = directory.path().join("converted");
     let policy = config();
-    let manifest = skin_gltf::convert(&source, &output, &policy).unwrap();
+    let manifest = skin_import::convert(&source, &output, &policy).unwrap();
     let bytes = fs::read(output.join(&manifest.meshes[0].file)).unwrap();
     let rbx_mesh::mesh::Mesh::V4(native) =
         rbx_mesh::read_mesh_versioned(std::io::Cursor::new(bytes)).unwrap()
@@ -196,7 +196,7 @@ fn source_skin_preserves_bind_space_units_joint_remapping_and_deformation() {
     let source = root.join("skin.gltf");
     fs::write(&source, serde_json::to_vec(&fixture(root)).unwrap()).unwrap();
     let output = root.join("converted");
-    let manifest = skin_gltf::convert(&source, &output, &config()).unwrap();
+    let manifest = skin_import::convert(&source, &output, &config()).unwrap();
     assert_eq!(manifest.rig[0].source_node, 0);
     assert_eq!(manifest.rig[1].source_node, 1);
     assert_eq!(manifest.rig[1].parent, Some(0));
@@ -232,7 +232,7 @@ fn source_skin_preserves_bind_space_units_joint_remapping_and_deformation() {
     }
     assert!((result_y - 1.5).abs() <= 2. / 255.);
     let second = root.join("second");
-    let repeated = skin_gltf::convert(&source, &second, &config()).unwrap();
+    let repeated = skin_import::convert(&source, &second, &config()).unwrap();
     assert_eq!(
         serde_json::to_vec(&manifest).unwrap(),
         serde_json::to_vec(&repeated).unwrap()
@@ -241,7 +241,7 @@ fn source_skin_preserves_bind_space_units_joint_remapping_and_deformation() {
         bytes,
         fs::read(second.join(&repeated.meshes[0].file)).unwrap()
     );
-    assert!(skin_gltf::convert(&source, &output, &config()).is_err());
+    assert!(skin_import::convert(&source, &output, &config()).is_err());
 }
 
 #[test]
@@ -257,7 +257,7 @@ fn invalid_weights_binds_and_unsupported_attributes_never_create_outputs() {
         binary[offset..offset + 4].copy_from_slice(&value.to_le_bytes());
         fs::write(root.join("skin.bin"), binary).unwrap();
         let output = root.join("bad");
-        let error = skin_gltf::convert(&source, &output, &config())
+        let error = skin_import::convert(&source, &output, &config())
             .err()
             .unwrap()
             .to_string();
@@ -274,7 +274,7 @@ fn invalid_weights_binds_and_unsupported_attributes_never_create_outputs() {
     for value in [extra, morph, duplicate] {
         fs::write(&source, serde_json::to_vec(&value).unwrap()).unwrap();
         let output = root.join("bad");
-        assert!(skin_gltf::convert(&source, &output, &config()).is_err());
+        assert!(skin_import::convert(&source, &output, &config()).is_err());
         assert!(!output.exists());
     }
 }

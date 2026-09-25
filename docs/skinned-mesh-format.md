@@ -3,7 +3,7 @@
 The Rust `skin::encode` implementation emits FileMesh v4.01 from canonical
 geometry, four-influence vertex envelopes and a topologically ordered skeleton.
 `roblox convert skin model.glb --config skin.json --output NEW_DIRECTORY`
-imports GLB/glTF geometry and skin data through that encoder. Offline bundles
+imports GLB/glTF or FBX geometry and skin data through that encoder. Offline bundles
 accept conversion kind `skin` with the same source and configuration.
 
 The encoder writes geometry, bone envelopes, a single LOD, bone world-bind CFrames,
@@ -53,9 +53,39 @@ fixture tests reversed source joint ordering, non-default metric scale, ignored
 mesh-node translation and explicit invalid-input rejection. CLI/bundle output
 and repeated conversion are checked for identical bytes.
 
-Remaining: FBX rig input, native Bone instance/animation-binding integration and
-engine acceptance. These tests prove format and CPU deformation, not current
-Roblox animated rendering. Source or target assets are never uploaded here.
+## FBX source profile
+
+The same `convert skin` command and JSON schema accept `.fbx`; `meshNode` is the
+ufbx node's typed id. Parsing uses the existing linked-in ufbx library, with no
+external material loading. Units and axes are converted using ModifyGeometry so
+centimetres do not become artificial scale on every bone.
+
+The input must contain one linear skin deformer on the selected mesh. For each
+cluster, `bind_to_world * geometry_to_bone` must agree on a shared geometry bind
+transform. That transform is baked into mesh positions/normals; bone world binds
+are encoded separately. Triangulated corners retain their original control-point
+indices so material splits cannot detach weights from geometry. Joint order is
+remapped before native subset/palette encoding.
+
+Unsupported dual-quaternion blending, vertex caches, blend shapes, non-rigid
+bone binds, inconsistent geometry binds and more than four positive influences
+are explicit failures. No top-four weight truncation is performed. The source
+mesh may have a non-rigid geometry transform when it can be baked into geometry;
+that is different from an unrepresentable scaled/sheared bone bind.
+
+The unchanged ufbx Maya transformed-skin fixture supplies independent FBX data.
+Tests compare native decoded deformation with `ufbx::get_skin_vertex_matrix`,
+including control-point mapping, transformed geometry, unit conversion and
+quantized weights. CLI and repeated output are verified. The fixture also exposed
+and regresses a false rejection of opaque Lambert materials whose black
+transparency/emission colors have factors of one.
+
+The conversion requirements in issue 3 are covered by the native-format tests,
+GLB/glTF and FBX source fixtures, deformation oracles, malformed-input tests and
+offline CLI/bundle integration. Native Bone instance/animation wiring belongs
+to scene/animation integration (issues 7/4); engine rendering remains unverified.
+These checks prove format and CPU deformation, not current Roblox animated
+rendering. Source or target assets are never uploaded here.
 
 ### Morph/facial follow-up inventory
 

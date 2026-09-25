@@ -53,12 +53,32 @@ pub(crate) fn read(path: &Path, bytes: &[u8], config: &Config) -> Result<Vec<Out
     {
         return Err("OBJ external material libraries are not supported yet".into());
     }
+    read_nodes(&scene, config, None)
+}
+
+pub(crate) fn read_skin_geometry(
+    scene: &ufbx::Scene,
+    config: &Config,
+    node: u32,
+    bind: &ufbx::Matrix,
+) -> Result<Vec<Output>> {
+    read_nodes(scene, config, Some((node, bind)))
+}
+
+fn read_nodes(
+    scene: &ufbx::Scene,
+    config: &Config,
+    skin_bind: Option<(u32, &ufbx::Matrix)>,
+) -> Result<Vec<Output>> {
     let mut outputs = Vec::new();
     for node in &scene.nodes {
+        if skin_bind.is_some_and(|(selected, _)| selected != node.element.typed_id) {
+            continue;
+        }
         let Some(source) = &node.mesh else {
             continue;
         };
-        if !source.all_deformers.is_empty()
+        if (skin_bind.is_none() && !source.all_deformers.is_empty())
             || source.uv_sets.len() > 1
             || source.color_sets.len() > 1
             || source.num_line_faces != 0
@@ -71,13 +91,13 @@ pub(crate) fn read(path: &Path, bytes: &[u8], config: &Config) -> Result<Vec<Out
         if !source.vertex_normal.exists || !source.vertex_uv.exists {
             return Err("normals and UV0 required".into());
         }
-        let transform = &node.geometry_to_world;
+        let transform = skin_bind.map_or(&node.geometry_to_world, |(_, bind)| bind);
         let determinant = ufbx::matrix_determinant(transform);
         if !determinant.is_finite() || determinant == 0. {
             return Err("singular source transform".into());
         }
         let normal_transform = ufbx::matrix_for_normals(transform);
-        let mut groups: BTreeMap<u32, mesh::Mesh> = BTreeMap::new();
+        let mut groups: BTreeMap<u32, (mesh::Mesh, Vec<usize>)> = BTreeMap::new();
         let mut indices = Vec::new();
         for (face_index, face) in source.faces.iter().enumerate() {
             let count = ufbx::triangulate_face_vec(&mut indices, source, *face) as usize * 3;
@@ -85,13 +105,19 @@ pub(crate) fn read(path: &Path, bytes: &[u8], config: &Config) -> Result<Vec<Out
                 return Err("face could not be triangulated".into());
             }
             let material = source.face_material.get(face_index).copied().unwrap_or(0);
-            let geometry = groups.entry(material).or_insert_with(|| mesh::Mesh {
-                vertices: Vec::new(),
-                triangles: Vec::new(),
+            let (geometry, source_points) = groups.entry(material).or_insert_with(|| {
+                (
+                    mesh::Mesh {
+                        vertices: Vec::new(),
+                        triangles: Vec::new(),
+                    },
+                    Vec::new(),
+                )
             });
             for triangle in indices[..count].chunks_exact(3) {
                 let start = u32::try_from(geometry.vertices.len())?;
                 for index in triangle {
+                    source_points.push(source.vertex_indices[*index as usize] as usize);
                     let position = ufbx::transform_position(
                         transform,
                         source.vertex_position[*index as usize],
@@ -158,14 +184,32 @@ pub(crate) fn read(path: &Path, bytes: &[u8], config: &Config) -> Result<Vec<Out
                 });
             }
         }
-        for (material_index, geometry) in groups {
+        for (material_index, (geometry, source_points)) in groups {
             let mut color = [1.; 4];
             let mut metallic = 0.;
             let mut roughness = 1.;
             if let Some(material) = node.materials.get(material_index as usize) {
+                let emission = material.pbr.emission_color.value_vec4;
+                let emission_factor = material.pbr.emission_factor.value_vec4.x;
+                let transmission_factor = material.pbr.transmission_factor.value_vec4.x;
+                // Legacy FBX transparency is color * factor. An opaque Lambert
+                // material normally has black transparency and factor one.
+                let transmission = if matches!(
+                    material.shader_type,
+                    ufbx::ShaderType::FbxLambert | ufbx::ShaderType::FbxPhong
+                ) {
+                    let color = material.pbr.transmission_color.value_vec4;
+                    [color.x, color.y, color.z]
+                        .iter()
+                        .any(|value| value * transmission_factor != 0.)
+                } else {
+                    transmission_factor != 0.
+                };
                 if !material.textures.is_empty()
-                    || material.pbr.transmission_factor.value_vec4.x != 0.
-                    || material.pbr.emission_factor.value_vec4.x != 0.
+                    || transmission
+                    || [emission.x, emission.y, emission.z]
+                        .iter()
+                        .any(|value| value * emission_factor != 0.)
                 {
                     return Err(
                         "textured, emissive and transmission materials require material conversion"
@@ -184,6 +228,7 @@ pub(crate) fn read(path: &Path, bytes: &[u8], config: &Config) -> Result<Vec<Out
             }
             let bytes = mesh::encode(&geometry)?;
             outputs.push(Output {
+                source_points,
                 entry: Entry {
                     file: format!(
                         "node-{}-primitive-{material_index}.mesh",
