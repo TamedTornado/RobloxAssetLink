@@ -174,3 +174,30 @@ No working file-only solution has been found, so no production converter or
 binding command has been presented as finished. Patching that engine behavior
 or introducing native cache integration is a separate architectural step, not
 an encoder regression fix.
+
+## Independent reverse-engineering report and local-render branch
+
+The newer [May 2026 regression report](https://devforum.roblox.com/t/local-assets-do-not-work-when-used-with-surfaceappearances-and-materialvariants/4638719/4)
+contains an August 22 analysis by developer `tabby0x` (not a Roblox staff fix).
+They identify the existing `RenderSurfaceAppearanceLocalAssets` branch and
+report that local maps need an empty TexturePack. Their proposed fix checks for
+local source maps before TexturePackGenerator's cache lookup, clears the pack
+reference, and returns through the existing local-rendering path. They also
+identify a mismatch between temporary (`rbxtemp://`, kind 4) and installed local
+(`rbxasset://`, kind 3) asset handling. The report remains open.
+
+Our installed binary contains that exact flag, registered at `0x1446d1e20`
+with value storage at `0x14d8aa938`. The branch at `0x1446ce677` requires that
+flag, an empty pack reference, and a positive local-source test. The local test
+at `0x1446d1970` checks source maps for content kind 3. Its alternate renderer
+at `0x1446d2780` requests the individual material maps. Thus the numeric-pack
+cache gate is not evidence that Roblox rendering inherently requires uploaded
+textures; there is a separate native local path.
+
+A camera-only play test enabled this flag and included an empty-pack PNG-map
+control. A read-only debugger check confirmed the live flag byte was `0x01`.
+The PBR control still rendered gray in this build. Therefore enabling the flag
+alone is not a verified repair, and the independent report's proposed native
+fix has not been applied or validated here. The temporary flag was removed.
+The next investigation belongs to selecting and preserving that local branch,
+not cloud publication, runtime EditableImage construction, or KTX header tuning.
