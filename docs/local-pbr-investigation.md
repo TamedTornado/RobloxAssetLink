@@ -7,6 +7,10 @@ Inspected the installed Studio 0.740.19.7400931 executable, SHA-256
 This is read-only format research: no executable patches, injected code,
 permission changes or feature-flag overrides.
 
+Later diagnostics below used hardware breakpoints and one temporary rendering
+flag, restored afterward. No executable code or authentication/security controls
+were modified.
+
 ### Local runtime packs are not uploaded XML descriptors
 
 Both renderer implementations explicitly handle local content (native content
@@ -128,3 +132,45 @@ It performs local decoding/material construction at test startup. The harness
 is acceptance-only and is not a runtime script added to product game builds.
 Shipping a development adapter or implementing the static-pack path remains
 separate work; no new product CLI command is claimed here.
+
+## Static binding blocker traced in the executable
+
+The local-image workaround above is **not completion of the agreed offline
+prebuilt-material workflow**. Jason explicitly rejected substituting startup
+material construction for loading prebuilt assets.
+
+Follow-up native investigation established:
+
+- Initial and 15-second-delayed serialization both preserve the local pack
+  prefix. Studio is not simply deleting the serialized TexturePack property.
+- The old renderer calls `0x1439289b0` at `0x144618441`, then tests the result
+  at `0x144618446` before reading the pack property. The newer renderer has the
+  equivalent gate at `0x144820ae0–0x144820ae7`.
+- An isolated live test hit a hardware breakpoint at `0x144618446` with
+  `RAX = 0`: admission fails before the static pack loader is reached.
+- That check enters `0x143934650`, constructs a source descriptor, and looks
+  it up in a generator-owned map. A second hardware breakpoint at
+  `0x143934988` observed `R14 = [RSI + 0x58]`, the end/sentinel entry. The
+  descriptor was absent, and the function takes its false-return branch.
+- Even the successful-cache-entry path for SurfaceAppearance reads its
+  TexturePack and compares it against a generated numeric asset reference:
+  `0x143934b0c` reads the property; the subsequent `0x1428dd680` formats
+  `rbxassetid://%lld` (format string at `0x148795578`). This is an additional
+  mismatch with a directly serialized `rbxasset://` filename prefix, not a
+  KTX byte-encoding problem.
+- Studio's rendering-only `FFlagDebugDisableTexturePackAssetManagerPreview`
+  was temporarily enabled for a separate play-mode test. The five static
+  materials still rendered gray. The setting was removed after the test.
+  This switch suppresses the preview request wrapper, not the readiness gate.
+
+Hardware breakpoints were detached normally; no instructions, return values,
+cache entries or account/security settings were changed by the debugger.
+
+These results explain the observed failed static fixture. They do not prove
+that every possible Studio integration is impossible. They do establish that
+changing KTX headers or retaining the saved pack URI is insufficient: a working
+integration must also address Studio's native generator/cache admission path.
+No working file-only solution has been found, so no production converter or
+binding command has been presented as finished. Patching that engine behavior
+or introducing native cache integration is a separate architectural step, not
+an encoder regression fix.
